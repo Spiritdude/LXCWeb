@@ -1,0 +1,690 @@
+#!/usr/bin/perl
+
+# --- LXC Web interface, written by Rene K. Mueller <spiritdude@gmail.com>
+#
+$APPNAME = 'LXCWeb';
+$VERSION = '0.017';
+# License: GPLv2
+#
+# History:
+# 2012/11/29: 0.012: startup script included, graphics refined
+# 2012/11/26: 0.006: cloning supported
+# 2012/11/22: 0.003: index.cgi (binary) calls 'lxcweb' (perl-script)
+# 2012/11/22: 0.002: suexec to circumvent 4755 not considered for scripts, suexec calls ./index.cgi
+# 2012/11/20: 0.001: starting
+
+use Digest::MD5 qw(md5_hex);
+use Time::HiRes qw(time);
+use POSIX qw(setuid getuid);
+
+my $debug = 0;
+
+setuid(0);
+
+readParse();
+
+$ENV{PATH} = '/usr/bin:/bin:/sbin:/usr/sbin';
+foreach(@ARGV) {
+   $in{$1} = $2 if(/(\S+)=(.*)/);
+}
+
+$appt = (stat($0))[9];
+
+$conf{home} = '/usr/local/etc/lxcweb';
+$conf{homelib} = '/usr/share/lxc';
+$conf{homerun} = '/var/lib/lxc';
+$in{action} = 'overview.list' unless($in{action});
+
+my $o;
+
+if($in{commit})  {                        # -- this action produces _no_ web-feedback, just performs tasks
+   if($in{commit}eq'host.stop') {
+      sexec('/sbin/halt');
+      
+   } elsif($in{commit}eq'host.reboot') {
+      sexec('/sbin/reboot');
+
+   } elsif($in{commit}eq'start') {
+      sexec('/usr/bin/lxc-start','-n',$in{id},'-d',"--logfile=$conf{homerun}/$in{id}/lxcweb-error.log");
+      mlog($in{id},"started");
+      open(F,">$conf{homerun}/$in{id}/.stamp.run"); close(F);
+      
+   } elsif($in{commit}eq'stop') {
+      sexec('/usr/bin/lxc-stop','-n',$in{id});
+      unlink("$conf{homerun}/$in{id}/.stamp.run");
+      mlog($in{id},"stopped");
+
+   } elsif($in{commit}eq'reboot') {
+      sexec('/usr/bin/lxc-stop','-n',$in{id});
+      sexec('/usr/bin/lxc-start','-n',$in{id},'-d',"--logfile=$conf{homerun}/$in{id}/lxcweb-error.log");
+      mlog($in{id},"rebooted");
+
+   } elsif($in{commit}eq'freeze') {
+      sexec('/usr/bin/lxc-freeze','-n',$in{id});
+      unlink("$conf{homerun}/$in{id}/.stamp.run");
+      mlog($in{id},"freeze");
+      
+   } elsif($in{commit}eq'unfreeze') {
+      sexec('/usr/bin/lxc-unfreeze','-n',$in{id});
+      open(F,">$conf{homerun}/$in{id}/.stamp.run"); close(F);
+      mlog($in{id},"unfreeze");
+
+   } elsif($in{commit}eq'create') {
+      if($in{type}=~/^clone:(\S+)/) {
+         my $orig = $1;
+
+         open(F,"$conf{homerun}/$orig/lxcweb.inf");
+         while(<F>) {
+            chop; next if(/^\s*#/);
+            $info{$orig}{$1} = $2 if(/(\S+):\s*(\S+)/);
+         }
+         close(F);
+   
+         sexec('/usr/bin/lxc-clone','-o',$orig,'-n',$in{id},'>',$in{id});
+         #sexec('/usr/bin/lxc-clone','-o',$orig,'-n',$in{id}); 
+
+         open(F,">$conf{homerun}/$in{id}/lxcweb.inf");
+         print F "type: $info{$orig}{type}\n";
+         print F "ctime: ",time(),"\n";
+         close(F);
+         
+         mlog($in{id},"cloned from $orig");
+
+      } else {
+         sexec('/usr/bin/lxc-create','-t',$in{type},'-n',$in{id},'>',$in{id}); 
+         #sexec('/usr/bin/lxc-create','-t',$in{type},'-n',$in{id}); 
+         open(F,">$conf{homerun}/$in{id}/lxcweb.inf");
+         print F "type: $in{type}\n";
+         print F "ctime: ",time(),"\n";
+         close(F);
+         mlog($in{id},"create with template $in{type}");
+      }
+
+   } elsif($in{commit}eq'destroy') {
+      sexec('/usr/bin/lxc-destroy','-n',$in{id});
+
+   } elsif($in{commit}eq'config') {
+      
+   }
+   print "Status: 307\nLocation: ./\n\n" unless($debug);
+}
+
+print "Content-type: text/html\n\n";
+
+# -- retrieve host info
+open(F,"/proc/uptime"); $_ = <F>; close(F);
+$info{_host}{uptime} = prettyTime($1) if(/(\S+)/);
+$_ = `uptime`;
+$info{_host}{cpu} = $cpu = $1 if(/load average: ([\d\.]+)/);
+$info{_host}{name} = `hostname`; chop($info{_host}{name});
+$info{_host}{status} = 'up';
+$info{_host}{info} = `uname -or`; chop($info{_host}{info});
+$info{_host}{ip} = $1 if(`ifconfig eth0`=~/inet addr:(\S+)/);
+$_ = `df $conf{homerun}`;
+$info{_host}{disktotal} = $1, $info{_host}{disk} = $2, $info{_host}{diskfree} = $3 
+   if(/\/dev\S+\s+(\d+)\s+(\d+)\s+(\d+)/);
+open(F,"/proc/meminfo");
+while(<F>) {
+   if(/(\S+):\s+(.+)/) {
+      my $a = lc $1;
+      $info{_host}{$a} = $2;
+   }
+}
+close(F);
+
+# -- calculate some stuff 
+$info{_host}{mem} = $info{_host}{memtotal}-$info{_host}{memfree};
+$info{_host}{swap} = $info{_host}{swaptotal}-$info{_host}{swapfree};
+$info{_host}{'mem%'} = sprintf("%.1f%%",100/$info{_host}{memtotal}*$info{_host}{mem});
+$info{_host}{'swap%'} = sprintf("%.1f%%",100/$info{_host}{swaptotal}*$info{_host}{swap});
+$info{_host}{'memfree%'} = sprintf("%.1f%%",100/$info{_host}{memtotal}*$info{_host}{memfree});
+$info{_host}{'swapfree%'} = sprintf("%.1f%%",100/$info{_host}{swaptotal}*$info{_host}{swapfree});
+$info{_host}{'disk%'} = sprintf("%.1f%%",100/$info{_host}{disktotal}*$info{_host}{disk});
+$info{_host}{'diskfree%'} = sprintf("%.1f%%",100/$info{_host}{disktotal}*$info{_host}{diskfree});
+
+my(@sel) = scanDir("$conf{homerun}");
+
+# -- determine resource usage per container
+foreach my $id (@sel) {
+   $info{$id}{name} = $id;
+   $info{$id}{status} = 'down';
+   $info{$id}{type} = 'ubuntu';
+   $info{$id}{cpu} = '';
+   $info{$id}{disk} = 1; #$1 if(cacheCMD("du -s $conf{homerun}/$id/rootfs")=~/(\S+)/);  # --- very slow ... caching? async?
+   $info{$id}{'disk%'} = sprintf("%.2f%%",100/$info{_host}{disktotal}*$info{$id}{disk}) if($info{_host}{disktotal});
+   $info{$id}{iptype} = '';
+   $info{$id}{ip} = '';
+   if(open(F,"$conf{homerun}/$id/rootfs/var/lib/dhcp/dhclient.eth0.leases")||
+      open(F,"$conf{homerun}/$id/rootfs/var/lib/dhclient/dhclient-eth0.leases")) {
+      while(<F>) {
+         $info{$id}{iptype} = 'auto', $info{$id}{ip} = $1 if(/fixed-address\s+([\d\.]+);/);
+      }
+      close(F);
+   } else {
+      open(F,"$conf{homerun}/$id/rootfs/etc/network/interfaces");
+      while(<F>) {
+         $info{$id}{iptype} = 'static', $info{$id}{ip} = $1 if(/^\s*iface\s*eth0\s*inet\s*(\S+)/);
+      }
+      close(F);
+      #$info{$id}{ip} = '?';
+   }
+   foreach(qw(lxcweb.inf rootfs/boot)) { 
+      my $ct = (stat("$conf{homerun}/$id/$_"))[9];
+      $info{$id}{ctime} = $ct;
+      last if($ct);
+   }
+   # -- basic info of the container
+   open(F,"$conf{homerun}/$id/config");
+   while(<F>) {
+      chop; next if(/^\s*#/);
+      $info{$id}{$1} = $2 if(/(\S+)\s*=\s*(\S+)/);
+   }
+   close(F);
+   
+   # -- additional info
+   open(F,"$conf{homerun}/$id/lxcweb.inf");
+   while(<F>) {
+      chop; next if(/^\s*#/);
+      $info{$id}{$1} = $2 if(/(\S+):\s*(\S+)/);
+   }
+   close(F);
+
+   # -- check max of each field
+   foreach (keys %{$info{$id}}) {
+      $max{$_} = $info{$id}{$_} if($info{$id}{$_}>$max{$_});
+   }
+
+   $info{$id}{ctime} = prettyDate($info{$id}{ctime})." (".prettyTime(time()-$info{$id}{ctime})." ago)" 
+      if($info{$id}{ctime});
+   
+   $info{$id}{uptime} = 0;
+   $info{$id}{procs} = 0;
+}
+
+# -- determine the status of the RUNNING containers
+# ps -o <attr>
+#       c     cmd          simple name of executable
+#       C     pcpu         cpu utilization
+#       f     flags        flags as in long format F field
+#       g     pgrp         process group ID
+#       G     tpgid        controlling tty process group ID
+#       j     cutime       cumulative user time
+#       J     cstime       cumulative system time
+#       k     utime        user time
+#       m     min_flt      number of minor page faults
+#       M     maj_flt      number of major page faults
+#       n     cmin_flt     cumulative minor page faults
+#       N     cmaj_flt     cumulative major page faults
+#       o     session      session ID
+#       p     pid          process ID
+#       P     ppid         parent process ID
+#       r     rss          resident set size
+#       R     resident     resident pages
+#       s     size         memory size in kilobytes
+#       S     share        amount of shared pages
+#       t     tty          the device number of the controlling tty
+#       T     start_time   time process was started
+#       U     uid          user ID number
+#       u     user         user name
+#       v     vsize        total VM size in KiB
+#       y     priority     kernel scheduling priority
+                                          
+foreach(split(/\n/,`ps -o cgroup,stat,euid,ruid,pid,pcpu,size,command wax`)) {
+   if(/^\d+:perf_event:\/lxc\/(\S+),\S*\s+(\S+)\s+(\S+)\s+(\S+)\s+(\S+)\s+(\S+)\s+(\S+)/) {
+      my $id = $1;
+      $info{$id}{procs}++;
+      $info{$id}{cpu} += $6; $info{$id}{cpu} = sprintf("%.2f%%",$info{$id}{cpu});
+      $info{$id}{mem} += $7;
+      foreach (qw(procs cpu mem)) {
+         $max{$_} = $info{$id}{$_} if($info{$id}{$_}>$max{$_});
+      }
+      $max{procstotal}++;
+   }
+   if(/lxc-start \-n (\S+)/) {
+      my $id = $1;
+      #$info{$id}{cpu} = $cpu;
+      $info{$id}{status} = 'up';
+      open(F,"/sys/fs/cgroup/freezer/lxc/$id/freezer.state"); $_ = <F>; close(F);
+      $info{$id}{status} = 'freeze' if(/frozen/i);
+
+      #$info{$id}{uptime} = prettyTime(time()-(stat("$conf{homerun}/$id/rootfs.hold"))[9]) if($info{$id}{status}eq'up');
+      $info{$id}{uptime} = prettyTime(time()-(stat("$conf{homerun}/$id/.stamp.run"))[9]) if($info{$id}{status}eq'up');
+   }
+}
+$max{procstotal} = $max{procs} = 1 unless($max{procs});
+
+$stats{up} = $stats{down} = $stats{setup} = $stats{broken} = 0;
+
+# -- some post-processing
+foreach my $id (@sel) {
+   $info{$id}{status} = 'broken' if(-f "$conf{homerun}/$id/.stamp.run"&&$info{$id}{status}eq'down');
+   $info{$id}{status} = 'broken' if($info{$id}{status}eq'up'&&$info{$id}{procs}==0);
+   #$info{$id}{'mem%'} = sprintf("%.1f%%",100/$max{'mem'}*$info{$id}{'mem'}) if($max{'mem'});
+   $info{$id}{'mem%'} = sprintf("%.1f%%",100/$info{_host}{'mem'}*$info{$id}{'mem'}) if($info{_host}{'mem'});
+   $stats{$info{$id}{status}}++;
+   $stats{setup}++;
+}
+
+my($vid,$hwaddr);
+foreach(split(/\n/,`ifconfig`)) {
+   $vid = $1, $hwaddr = $2 if(/^veth(\S+).+HWaddr (\S+)/);
+   
+}
+ 
+if($in{action}eq'about') {
+   open(F,"about.html");
+   while(<F>) {
+      $o .= $_;
+   }
+   close(F);
+   
+} elsif($in{action}eq'config') {
+   foreach(qw(homelib homerun)) {
+      $o .= "<li>$_: $conf{$_}\n";
+   }
+
+} elsif($in{action}eq'details') {
+   my $id = $in{id};
+   my(%input) = ('name'=>'input','ip'=>'input','comment'=>'textarea');
+   $o .= "<table class=machineDetailsTable>";
+   foreach (qw(name type status ip lxc.network.hwaddr cpu mem procs disk disk% comment uptime ctime)) {
+      my $f = $info{$id}{$_};
+      if($input{$_}eq'input') {
+         $f = "<input name=$_ value='$f'>" if($info{$id}{status}eq'down');
+      } elsif($input{$_}eq'textarea') {
+         $f = "<textarea name=$_>$f</textarea>";
+      }
+      $f = largeNum($f,0)."KB" if($_ eq 'mem'||$_ eq 'disk');
+      $f = "<img class=machinestatus src='./extra/imgs/machine-$f.png'> ($f)</td><td>".machineButtons($in{id}) if($_ eq 'status');
+      
+      $o .= "<tr>".
+         enclose("<td align=right>","</td>","$_:").
+         enclose("<td class=machineDetailValue>","</td>",$f).
+         "</tr>";
+   }
+   $o .= "</table>";
+   $o .= "<p><table><tr>";
+   #open(F,"$conf{homerun}/$id/rootfs/var/log/syslog");
+   my $wp = '33%';
+   foreach my $l (qw(lxcweb.log lxcweb-error.log rootfs/var/log/syslog)) {
+      $o .= "<td width=$wp><b>$l</b>: <div class=log>";
+      @_ = ();
+      open(F,"$conf{homerun}/$id/$l");
+      while(<F>) {
+         push(@_,$_);
+      }
+      if($l eq 'lxcweb.log') {
+         #$o .= "<table class=logTable>";
+         foreach (reverse @_) {
+            my(@a) = split(/\t/); shift(@a);
+            #$o .= "<tr>".enclose("<td>","</td>",@a)."</tr>\n";
+            $o .= join(" ",@a)."<br>";
+         }
+         #$o .= "</table>";
+      } else {
+         foreach (reverse @_) {
+            $o .= "$_<br>\n";
+         }
+      }
+      $o .= "</div>";
+      $o .= "</td>";
+   }
+   $o .= "</tr></table>";
+   
+} elsif($in{action}eq'host') {
+   foreach(qw(name cpu info memtotal memfree% swaptotal swapfree%)) {
+      $o .= "$_: ";
+      if($_ eq 'status') {
+         $o .= "<img class=machinestatus src='extra/imgs/machine-".($info{_host}{status}eq'up'?'up':'down').".png'>";
+      
+      } else {
+         $o .= "<b>$info{_host}{$_}</b>\n";
+      }
+      $o .= "<br>";
+   }
+
+} else {
+   my(@sel) = scanDir("$conf{homerun}");
+   $o .= "<div style='float: right'>
+       <a href=# onclick=\"popup('popup','Host Halt','Do you want to stop the host and all its containers (this web-interface will stop functioning)?','./?commit=host.stop')\"><img class=button src='./extra/imgs/machinestop.png'></a>
+       <a href=# onclick=\"popup('popup','Host Reboot','Do you want to reboot the host all thereby restart all containers?','./?commit=host.reboot')\"><img class=button src='./extra/imgs/machinereboot.png'></a>
+      </div>";
+   $o .= "<table class=hostTable>".
+      "<tr>".enclose("<td>","</td>",
+         "$info{_host}{name} ($info{_host}{ip})",'','',
+         "Disk:",bar(200,5,100-$info{_host}{'diskfree%'}),     # -- disk% + diskfree% != 100%
+            largeNum($info{_host}{disk}/1000)."MB",
+            "($info{_host}{'disk%'})",'/',
+            largeNum($info{_host}{diskfree}/1000)."MB",
+            "($info{_host}{'diskfree%'}) free"
+      )."</tr>";
+   $o .= "<tr>".enclose("<td>","</td>",
+      "CPU: <span class=cpuload".
+            ($info{_host}{cpu}<1?"below1":
+               ($info{_host}{cpu}>5?"over5":"over".int($info{_host}{cpu}))
+            ).">$info{_host}{cpu}</span>",
+      '','','Memory:',bar(200,5,$info{_host}{'mem%'}),
+      largeNum($info{_host}{mem}/1000)."MB",
+      "($info{_host}{'mem%'})",'/',
+      largeNum($info{_host}{memfree}/1000)."MB",
+      "($info{_host}{'memfree%'}) free"
+      )."</tr>";
+   $o .= "<tr>".enclose("<td>","</td>",
+      'Uptime: '.$info{_host}{uptime},
+      '','','Swap:',bar(200,5,$info{_host}{'swap%'}),
+      largeNum($info{_host}{swap}/1000)."MB",
+      "($info{_host}{'swap%'})",'/',
+      largeNum($info{_host}{swapfree}/1000)."MB",
+      "($info{_host}{'swapfree%'}) free"
+      )."</tr>";
+      
+   $o .= "</table>";
+
+   if($in{action} eq 'overview.grid') {
+      my $n;
+      $o .= "<table class=machinegridTable>";
+      foreach my $id (@sel) {
+         $o .= "</tr><tr>" if($n&&($n%10)==0);
+         $o .= "<td class='machine$info{$id}{status} machinegrid'>".
+            "<img class=machinestatusgrid src='extra/imgs/machine-$info{$id}{status}.png'><br>".
+            "<b><a href='./?action=details&id=$id'>$id</a></b><br>$info{$id}{cpu}<br>".bar(80,1,$max{cpu}?100/$max{cpu}*$info{$id}{cpu}:0).
+            "$info{$id}{ip}".
+            "</td>";
+         $n++;   
+      }
+      $o .= "</tr></table>";
+      
+   } else { # -- overview.list
+      $o .= "<table class='overviewTable sortable'>";
+      $o .= "<tr>".
+         enclose("<th>","</th>",qw(Status Name)).
+         enclose("<th class='sortable_numeric'>","</th>",qw(IP CPU Procs Procs% Memory Mem% Disk)).
+         enclose("<th>","</th>",qw(Action Comment),'')."</tr>";
+      my $namel;
+      foreach my $id (@sel) {
+         $o .= "<tr class=machine$info{$id}{status}>";
+         $o .= enclose("<td>","</td>",
+            "<img class=machinestatus src='extra/imgs/machine-$info{$id}{status}.png'>",
+            "<b><a href='./?action=details&id=$id'>$id</a></b><div class=infotype>$info{$id}{type}</div>",
+            "$info{$id}{ip}".($info{$id}{iptype}?" ($info{$id}{iptype})":"")."<div class=infohwaddr>$info{$id}{'lxc.network.hwaddr'}</div>",
+            $info{$id}{cpu},
+            $info{$id}{procs}." (".sprintf("%.1f%%",100/$max{procstotal}*$info{$id}{procs}).")",
+            sprintf("%.1f%%",100/$max{procs}*$info{$id}{procs}),
+            largeNum($info{$id}{mem}/1000)."MB ($info{$id}{'mem%'})",
+            sprintf("%.1f%%",100/($max{'mem'}?$max{'mem'}:1)*$info{$id}{'mem'}),
+            largeNum($info{$id}{disk}/1000)."MB (".$info{$id}{'disk%'}.")"."<br>".bar(100,1,100/$max{disk}*$info{$id}{'disk'},'#8040ff'),
+            machineButtons($id),
+            '',
+            '<input type=checkbox name=sel value=$id>'
+            )."</tr>\n";
+      }
+      $namel = $id;
+   }
+   unless($in{action}eq'overview.grid') {
+      my $temp;
+      if($namel) {
+         $namel++;
+      } else {
+         $namel = "lxc00";
+      }
+      $o .= "<form method=get action='./'>";       # -- post is prefered, but browsers conclude WRONGLY a redirection loop (to all browser programmers: don't assume things you don't understand!!!)
+      $o .= "<input type=hidden name=commit value=create>";
+      $temp = "<select name=type>";
+      my(@sel) = scanDir("$conf{homelib}/templates"); 
+      @sel = map { s/^lxc-//; $_; } @sel;
+      foreach(sort @sel) {
+         $temp .= "<option value='$_'>$_<br>\n";
+      }
+      my(@sel) = scanDir("$conf{homerun}/"); 
+      foreach(sort @sel) {
+         $temp .= "<option value='clone:$_'>clone: $_<br>\n";
+      }
+      $temp .= "</select>";
+      $o .= "<tfoot><tr>".enclose("<td>","</td>",
+         #"<img class=machinestatus src='extra/imgs/machine-down.png'>",
+         '',
+         "<input class=inputField name=id value='$namel' size=8>",
+         "<input class=inputField name=ip size=10 value='auto'>",
+         '',
+         '',
+         '',
+         '',
+         '',
+         $temp,
+         "<input class=formSubmit type=submit value=create>"
+         );
+      $o .= "</form></tr></tfoot>";
+      $o .= "</table>";
+   }
+   my $i;
+   if($stats{setup}) { 
+      $o .= "Total ";
+      $i = 0;
+      foreach(qw(setup up down freeze broken)) {
+         if($stats{$_}) {
+            $o .= ", " if($i++);
+            $o .= "$stats{$_} $_";
+         }
+      }
+      $o .= "&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;Status: ";
+      $i = 0;
+      foreach (qw(up down freeze broken)) {
+         $o .= ", " if($i++);
+         if($in{action}eq'overview.grid') {
+            $o .= "<span class='machine$_'>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</span> $_";
+         } else {
+            $o .= "<img class=machinestatuslegend src='./extra/imgs/machine-$_.png'> $_";
+         }
+      } 
+   }
+}
+
+print "<html><head><title>$info{_host}{name} ($stats{up}/$stats{broken}/$stats{setup}) $APPNAME-$VERSION</title><link rel=stylesheet href='./extra/css/default.css' type='text/css'>";
+print "<link rel=\"icon\" href='./extra/imgs/favicon.png' typex='image/png'>";
+print "<link rel=\"shortcut icon\" href='./extra/imgs/favicon.png' typex='image/png'>";
+print "<script type=\"text/javascript\" src=\"./extra/js/css-pop.js\"></script>";
+print "</head><body>";
+print "<script src='./extra/js/sorttable.js'></script>";
+#print "<h1>LXC Console ($info{_host}{name}) <img id=lxclogo src='./extra/imgs/LXC.png'></h1>\n";
+print "<div class=warning><b>Error</b>: Installation incomplete, the script has insufficient priviledges to do anything. Make sure 'index.cgi' is executed and has 4755 permission and has root:root ownership.</div>" if($>);
+print "<div id=header>";
+print "<ul>";
+my(@sel) = (qw(overview.list overview.grid config about));
+push(@sel,"details:Details $in{id}") if($in{action} eq 'details'); 
+foreach(@sel) {
+   my $t = $_; $t =~ s/(.)/uc $1/e; $t .= ')' if($t =~ s/\./ (/);
+   $t = $1 if(s/\:(.+)//);
+   print "<li".($in{action}eq$_?" id=selected><a href=#>$t</a>":"><a href='./?action=$_'>$t</a>")."</li>\n";
+}
+#print "<li id=off>LXCHost: <b>$info{_host}{name}</b>, $info{_host}{info}, CPU: $cpu, Disk: ".sprintf("%.2fMB",$info{_host}{disk}/1000)." / $info{_host}{'disk%'}</li>\n";
+print "</ul>";
+print "</div>";
+
+print "<div id=content>";
+print $o;
+print "</div>";
+print "<div id=footer>$APPNAME-$VERSION ",prettyDate($appt),"</div>";
+
+print "<div id=blanket style='display:none;'></div>
+   <div id=popup style='display:none;'></div>
+	</div>";	
+print "</body></html>\n";
+
+# ------------------------------------------------------------------------------------------------------------
+
+sub enclose() {
+   my($a,$b,@i) = @_;
+   my($o);
+   foreach(@i) {
+      $o .= "$a$_$b";
+   }
+   return $o;
+}
+
+sub largeNum {
+   my($a,$n) = @_;
+   my($s,$i);
+   $n = 2 if(!defined $n);
+   $s .= sprintf(".%0${n}d",int(($a-int($a))*100)%100) if($n);
+   while($a||$i==0) {
+      $s = ",$s" if($i&&($i%3)==0);
+      $s = ($a%10).$s;
+      $a = int($a/10);
+      $i++;
+   }
+   return $s;
+}
+
+sub bar {
+   my($w,$h,$v,$c) = @_;
+   my $wx = int($w/100*(100-$v));
+   unless($c) {
+      $c = 'blue'; $c = 'orange' if($v>80); $c = 'red' if($v>90);
+   }
+   return "<div style='width: ${w}px; height: ${h}px;' class=barContainer><div style='width: ${wx}px; height: ${h}px;' class=bar></div></div>";
+}
+
+sub mlog {
+   my($id,$c) = @_;
+   open(LOG,">>$conf{homerun}/$id/lxcweb.log");
+   my $t = time();
+   print LOG join("\t",$t,prettyDate($t),$id,$c),"\n";
+   close(LOG);
+}
+
+sub prettyDate {
+   @_ = localtime($_[0]);
+   sprintf("%04d/%02d/%02d %02d:%02d:%02d",$_[5]+1900,$_[4]+1,$_[3],$_[2],$_[1],$_[0]);
+}
+
+sub prettyTime {
+   my($t) = @_;
+   sprintf("%dd %02dh %02dm %02ds",int($t/(24*60*60)),int($t/(60*60))%24,int($t/60)%60,int($t)%60);
+}
+
+sub scanDir() {
+   my($d,$p) = @_;
+   opendir(D,$d);
+   $p = '.' unless($p);
+   @_ = sort grep(!/\./&&/$p/,readdir(D));
+   closedir(D);
+   return @_;
+}
+
+sub machineButtons {
+   my($id) = @_;
+   my $btn;
+   if($info{$id}{status}eq'up') {
+      $btn .= "<img class=button src='./extra/imgs/machinestartoff.png'>";
+      $btn .= "<a href='./?commit=stop&id=$id'><img alt=stop class=button src='./extra/imgs/machinestop.png'></a>";
+      $btn .= "<a href='./?commit=freeze&id=$id'><img alt=freeze class=button src='./extra/imgs/machinefreeze.png'></a>";
+      $btn .= "<a href='./?commit=reboot&id=$id'><img alt=reboot class=button src='./extra/imgs/machinereboot.png'></a>";
+      $btn .= "<img class=button src='./extra/imgs/machinedestroyoff.png'>";
+   } elsif($info{$id}{status}eq'down'||$info{$id}{status}eq'broken') {
+      $btn .= "<a href='./?commit=start&id=$id'><img alt=start class=button src='./extra/imgs/machinestart.png'></a>";
+      $btn .= "<img class=button src='./extra/imgs/machinestopoff.png'>";
+      $btn .= "<img class=button src='./extra/imgs/machinefreezeoff.png'>";
+      $btn .= "<img class=button src='./extra/imgs/machinerebootoff.png'>";
+      #$btn .= "<a href='./?commit=destroy&id=$id'><img class=button src='./extra/imgs/machinedestroy.png'></a>";
+      $btn .= "<a href=# onclick=\"popup('popup','Destroy Container','Do you want to destroy the container \\'$id\\' and thereby delete all its data?','./?commit=destroy&id=$id')\"><img class=button src='./extra/imgs/machinedestroy.png'></a>";
+   } elsif($info{$id}{status}eq'freeze') {
+      $btn .= "<img class=button src='./extra/imgs/machinestartoff.png'>";
+      $btn .= "<img class=button src='./extra/imgs/machinestopoff.png'>";
+      $btn .= "<a href='./?commit=unfreeze&id=$id'><img alt=unfreeze class=button src='./extra/imgs/machinefreeze.png'></a>";
+      $btn .= "<img class=button src='./extra/imgs/machinerebootoff.png'>";
+      $btn .= "<img class=button src='./extra/imgs/machinedestroyoff.png'>";
+   }
+   return $btn;
+}
+
+sub sexec {
+   my $bckg;
+   pop(@_), $bckg++ if($_[$#_]eq'&');
+   $log = pop(@_), pop(@_) if($_[$#_-1]eq'>');
+   if($debug||$log) {                                    # -- TODO: redirect stdout if asked for '>' $id SECURELY!
+      my $cmd = join(' ',@_);
+      `$cmd >> $conf{homerun}/$log-lxcweb-error.log`;    # -- THIS IS INSECURE!! (FIXIT)
+      rename("$conf{homerun}/$log-lxcweb-error.log","$conf{homerun}/$log/lxcweb-error.log");
+      
+   } else {
+      if(fork()==0) {
+         if($log) {
+            # -- DOES NOT WORK YET ...
+            exec { $_[0] } @_, ">> $conf{homerun}/$log-lxcweb-error.log";
+            rename("$conf{homerun}/$log-lxcweb-error.log","$conf{homerun}/$log/lxcweb-error.log");
+   
+         } else {
+            exec { $_[0] } @_;
+         }
+         exit;    # -- never reaches here..
+      } else {
+         wait() unless($bckg);
+      }
+   }
+}
+
+sub cacheCMD {
+   my($s,$min) = @_;
+   my($k) = md5_hex($s);
+   $min = 15 unless($min);
+   $min += rand()*$min*.5;
+   if((stat("cache/$k"))[9]>time()-$min*60) {
+      my $o;
+      open(F,"cache/$k");
+      while(<F>) {
+         $o .= $_;
+      }
+      close(F);
+      return $o;
+   } else {
+      $_ = `$s`;
+      open(F,">cache/$k");
+      print F $_;
+      close(F);
+      return $_;
+   }
+}
+
+sub readParse {
+  if (@_) {
+    local (*in) = @_;
+  }
+
+  my ($i, $loc, $key, $val);
+
+  # Read in text
+  if ($ENV{'QUERY_STRING'}) { # $ENV{'REQUEST_METHOD'} eq "GET") {
+    $in = $ENV{'QUERY_STRING'};
+    #$in .= "&$1" if($ENV{'REQUEST_URI'}=~/\/\w\S+\?(.*)/);
+  } 
+  if ($ENV{'REQUEST_METHOD'} eq "POST") {
+    $in .= "&" if(length($in));
+    for ($i = 0; $i < $ENV{'CONTENT_LENGTH'}; $i++) {
+      $in .= getc;
+    }
+  } 
+
+  @in = split(/&/,$in);
+
+  foreach $i (0 .. $#in) {
+    # Convert plus's to spaces
+    $in[$i] =~ s/\+/ /g;
+
+    # Convert %XX from hex numbers to alphanumeric
+    $in[$i] =~ s/%(..)/pack("c",hex($1))/ge;
+
+    # Split into key and value.
+    $loc = index($in[$i],"=");
+    $key = substr($in[$i],0,$loc);
+    $val = substr($in[$i],$loc+1);
+    $in{$key} .= "\0" if (defined($in{$key})); # \0 is the multiple separator
+    $in{$key} .= $val; # unless($in{$key});
+  }
+
+  foreach (split(/;/,$ENV{HTTP_COOKIE})) {
+     s/^\s*//; s/\s*$//;
+     $cookie{$1} = $2 if(/([^=]+)=(.+)/);
+  }
+  return 1; # just for fun
+}
+               

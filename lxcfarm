@@ -1,0 +1,93 @@
+#!/usr/bin/perl
+
+# -- LXC Farm, written by Rene K. Mueller <spiritdude@gmail.com>
+#
+$VERSION = '0.005';
+$APPNAME = 'lxcfarm';
+#
+# License: GPLv2
+#
+# History:
+# 2012/11/30: initial version
+
+$conf{homerun} = '/var/lib/lxc';
+
+while($#ARGV>=0) {
+   my $a = shift(@ARGV);
+   $do = $a, next unless($do);
+   $orig = shift(@ARGV), next if($a eq '-o');
+   $temp = shift(@ARGV), next if($a eq '-t');
+   $name = $a, next unless($name);
+   $n = $a, next unless($n);
+}
+
+unless($do eq 'create'||$do eq 'start'||$do eq 'stop'||$do eq 'freeze'||$do eq 'unfreeze'||$do eq 'info') {
+   print "Error: unknown command $do\n";
+   usage();
+}
+
+$temp = 'ubuntu' unless($temp);
+$n = 1 unless($n);
+print "$APPNAME: perform on $n containers:\n";
+my $i = 0;
+while($i<$n) {
+   if($do eq 'c'&&-e "$conf{homerun}/$name") {
+      print "\tskipping $name, exists already\n";
+
+   } else {
+      print "\t",($i+1)," of $n: ";
+      if($do eq 'create') {
+         if($orig) {
+            print "clone $orig to $name\n";
+            `lxc-clone -o $orig -n $name`; # --logfile=$conf{homerun}/$name/lxcweb-error.log`;
+            copy("$conf{homerun}/$orig/lxcweb.inf","$conf{homerun}/$name/lxcweb.inf");
+
+         } else {
+            print "creating $name ($temp)\n";
+            `lxc-create -t $temp -n $name`; # --logfile=$conf{homerun}/$name/lxcweb-error.log`;
+            open(F,">$conf{homerun}/$name/lxcweb.inf");
+            print F "type: $temp\nctime: ".time()."\n";
+            close(F);
+         }
+         
+      } elsif($do eq 'start') {
+         print "start $name\n";
+         if(1) {
+            `lxc-start -n $name -d --logfile=$conf{homerun}/$name/lxcweb-error.log`;
+         } else {
+            if(fork()==0) {
+               `lxc-start -n $name --logfile=$conf{homerun}/$name/lxcweb-error.log`;
+               exit(0);
+            }
+         }
+         open(F,">$conf{homerun}/$name/.stamp.run"); close(F);
+         sleep(1);
+         
+      } elsif($do eq 'freeze') {
+         print "freeze $name\n";
+         `lxc-freeze -n $name`; # --logfile=$conf{homerun}/$name/lxcweb-error.log`;
+
+      } elsif($do eq 'unfreeze') {
+         print "unfreeze $name\n";
+         `lxc-unfreeze -n $name`; # --logfile=$conf{homerun}/$name/lxcweb-error.log`;
+         
+      } elsif($do eq 'stop') {
+         print "stop $name\n";
+         `lxc-stop -n $name`; # --logfile=$conf{homerun}/$name/lxcweb-error.log`;
+         unlink("$conf{homerun}/$name/.stamp.run");
+         
+      } else {
+         print "Error: unknown command $do\n";
+         usage();
+      }
+      $i++;
+   }
+   $name++;
+}
+
+
+sub usage {
+   print "\nUsage $APPNAME: {-o [clone-base]} {-t [template]} [cmd] {[n]}\n\t-o clone-base\te.g. -o ubu00\n\t-t template\te.g. -t ubuntu\n\tcmd\t\tcommand: {start,halt,create,freeze,unfreeze}\n\tn\t\tn times follow up\n";
+   exit 1;
+}
+

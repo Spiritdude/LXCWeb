@@ -1,0 +1,61 @@
+#!/usr/bin/perl
+
+### BEGIN INIT INFO
+# Provides:          lxcweb
+# Required-Start:    $remote_fs $syslog
+# Required-Stop:     $remote_fs $syslog
+# Default-Start:     2 3 4 5
+# Default-Stop:      0 1 6
+# Short-Description: Starts/stops lxc containers controlled by LXCWeb
+# Description:       
+### END INIT INFO
+
+# Author: Rene K. Mueller
+
+# --- rc-d-lxcweb startup/stop script for LXCWeb
+#  written by Rene K. Mueller <spiritdude@gmail.com>
+# 
+$VERSION = '0.003';
+#
+# History:
+# 2012/11/30: 0.002: sleep(1) when start lxc to ensure all start properly (bug somewhere on OS level 2012-11-30)
+# 2012/11/29: 0.001: initial version
+
+my %conf;
+
+$conf{homerun} = '/var/lib/lxc';
+my $do = shift(@ARGV);
+
+# --- which lxc are or were running (ungraceful stopped)
+opendir(D,"$conf{homerun}");
+my(@l) = sort grep(-f "$conf{homerun}/$_/.stamp.run",readdir(D));
+closedir(D);
+
+if($do eq 'start') {
+   my $i;
+   foreach my $id (@l) {
+      sexec('/usr/bin/lxc-start','-n',$id,'-d',"--logfile=$conf{homerun}/$id/lxcweb-error.log");
+      open(F,">$conf{homerun}/$id/.stamp.run"); close(F);    # -- touch the stamp
+      sleep(1);                                              # -- throttle otherwise lxc fail to start (2012-11-30)
+   }
+} elsif($do eq 'stop') {
+   foreach my $id (@l) {
+      sexec('/usr/bin/lxc-stop','-n',$id);                   # -- it may stall, perhaps call it with '&' 
+   }
+}
+
+sub sexec {
+   my $bckg;
+   pop(@_), $bckg++ if($_[$#_]eq'&');
+   if($debug) {
+      print `@_`;
+   } else {
+      if(fork()==0) {
+         exec { $_[0] } @_;
+         exit;    # -- never reaches here..
+      } else {
+         wait() unless($bckg);
+      }
+   }
+}
+

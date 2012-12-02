@@ -1,0 +1,36 @@
+Just call
+   make install
+   
+
+Make sure .cgi are executed on your web-server:   
+
+lighttpd.conf:
+   cgi.assign = ( ".cgi" => "" );
+
+
+==LXCFarm==
+
+Running full farm, e.g. over 20 lxc containers you can use lxcfarm script.
+
+Create a base system:
+   % sudo ./lxcfarm create -t ubuntu ubu00
+   
+then start it, configure it properly and then leave and stop it again.
+
+Then create 40x clones of it:
+   % sudo ./lxcfarm create -o ubu00 ubu01 40
+
+and start them
+   % sudo ./lxcfarm start ubu01 40 
+
+
+on the host:
+   % sudo su
+   % ssh-keygen
+   % mkdir /var/lib/lxc/ubu01/rootfs/root/.ssh
+   % cat .ssh/id_rsa.pub >> /var/lib/lxc/ubu01/rootfs/root/.ssh/authorized_keys
+
+recreating ssh keys (private & public) in the lxc containers:
+   % rm -f /ec/ssh/ssh_host_*
+   % dpkg-reconfigure openssh-server
+   
