@@ -9,6 +9,9 @@ what works:
 - halt and reboot host (and all containers therein)
 
 what doesn't works:
+- configure virtual network (br0), for now it's DHCP; each container a DHCP-client (dynamic IP allocation)
+- static IP for containers
+- disk-usage info per container
 - there is no authentication, whoever has access to the host, can access LXCWeb
 - there is little to no security audit done _yet_ - so you likely can use the web-interface to do more things than just handle LXC but likely take over the entire machine
 
