@@ -272,11 +272,14 @@ foreach(split(/\n/,`ifconfig`)) {
 }
  
 if($in{action}eq'about') {
+   $o .= "<div class=about>";
+   $o .= "Version: $APPNAME $VERSION<p>";
    open(F,"about.html");
    while(<F>) {
       $o .= $_;
    }
    close(F);
+   $o .= "</div>";
    
 } elsif($in{action}eq'config') {
    foreach(qw(homelib homerun)) {
