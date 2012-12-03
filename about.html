@@ -1,6 +1,37 @@
 <h1>About LXCWeb</h1>
 
+<b><a href="http://lxc.sourceforge.net/">LinuX Containers (LXC)</a></b> is a lightweight LINUX virtualization approach with little demands on the CPU unlike other approaches such as <a href="http://xen.org/">Xen.org</a> or <a href="http://www.linux-kvm.org">KVM</a>; 
+and therefore it is <b>possible to run LXC containers <u>within</u> a virtual machine</b> like <a href="http://www.linux-kvm.org/">KVM</a>, <a href="http://virtualbox.org/">VirtualBox</a> or <a href="http://vmware.com/">VMWare Player</a>.
+The performance trade-off of this is lightweight virtualization is minimal as it's essentially just process and network isolation, using the same LINUX kernel.
+<p>
+<b>LXCWeb</b> is a simple web-interface to give control over LXC containers:
+<ul>
+<li>start, stop, freeze and unfreeze
+<li>create, clone and destroy
+</ul>
+containers.
+<p>
+Additional there are two helpers included:
+<ul>
+<li><b>init-d-lxcweb</b> which becomes <b>/etc/init.d/lxcweb</b>: it takes care if the host is (re-)booted that the containers which have been running before start again
+<li><b>lxcfarm</b>: allows to create, clone, start, stop, freeze and unfreeze a farm of containers (when the web-interface is too cumbersome)
+</ul>
+
 <h2>Naming Convention</h2>
 
-November 29, 2012
+I recommend following naming convention:
+<ol>
+<li>create a base system, e.g. Ubuntu, create "ubu00" with "ubuntu" as type.
+<li>start "ubu00", login (ssh) and update, install your favourite programs and databases.
+<li>logout, and stop "ubu00"
+<li>clone "ubu00" to "ubu01" by the web-interface, or call <b>lxcfarm create -o ubu00 ubu01 30</b> creates 30 clones of ubu00
+<li>start your "ubuXX", e.g. either via the web-interface or call on the command-line <b>lxcfarm start ubu01 30</b> starts ubu01 to ubu30.
+</ol>
+
+<h2>Updating LXCWeb</h2>
+
+Visit <b><a href="https://github.com/Spiritdude/LXCWeb">LXCWeb @ Github</a></b> and clone it from there, and call <b>make install</b> in the directory again.
+<p><br>
+Ren&eacute; K. M&uuml;ller<br>
+December 3, 2012
 
