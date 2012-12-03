@@ -3,7 +3,7 @@ This is a web-interface for LXC (LinuX Container) with some helpers (/etc/init.d
 It's an ALPHA release:
 
 what works:
-- create, clone, freeze, unfreeze and stop containers via web-interface
+- create, clone, start, freeze, unfreeze and stop containers via web-interface
 - see details of the containers
 - auto-start containers at boot time when host starts
 
@@ -11,5 +11,5 @@ what doesn't works:
 - there is no authentication, whoever has access to the host, can access LXCWeb
 - there is little to no security audit done _yet_ - so you likely can use the web-interface to do more things than just handle LXC but likely take over the entire machine
 
-December 1, 2012
+December 3, 2012
 
