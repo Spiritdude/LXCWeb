@@ -87,7 +87,7 @@ while($i<$n) {
 
 
 sub usage {
-   print "\nUsage $APPNAME: {-o [clone-base]} {-t [template]} [cmd] {[n]}\n\t-o clone-base\te.g. -o ubu00\n\t-t template\te.g. -t ubuntu\n\tcmd\t\tcommand: {start,halt,create,freeze,unfreeze}\n\tn\t\tn times follow up\n";
+   print "\nUsage $APPNAME: {-o [clone-base]} {-t [template]} [cmd] {[n]}\n\t-o clone-base\te.g. -o ubu00\n\t-t template\te.g. -t ubuntu\n\tcmd\t\tcommand: {start,stop,create,freeze,unfreeze}\n\tn\t\tn times follow up\n";
    exit 1;
 }
 
