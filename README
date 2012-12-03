@@ -6,10 +6,12 @@ what works:
 - create, clone, start, freeze, unfreeze and stop containers via web-interface
 - see details of the containers
 - auto-start containers at boot time when host starts
+- halt and reboot host (and all containers therein)
 
 what doesn't works:
 - there is no authentication, whoever has access to the host, can access LXCWeb
 - there is little to no security audit done _yet_ - so you likely can use the web-interface to do more things than just handle LXC but likely take over the entire machine
 
+Rene K. Mueller
 December 3, 2012
 
