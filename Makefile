@@ -1,7 +1,7 @@
 VERSION=0.018
 
 all::
-	@echo "make install"
+	@echo "make install" 
 
 install:	index.cgi fixperm
 	sudo cp init-d-lxcweb /etc/init.d/lxcweb

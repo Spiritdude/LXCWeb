@@ -135,10 +135,14 @@ close(F);
 # -- calculate some stuff 
 $info{_host}{mem} = $info{_host}{memtotal}-$info{_host}{memfree};
 $info{_host}{swap} = $info{_host}{swaptotal}-$info{_host}{swapfree};
-$info{_host}{'mem%'} = sprintf("%.1f%%",100/$info{_host}{memtotal}*$info{_host}{mem});
-$info{_host}{'swap%'} = sprintf("%.1f%%",100/$info{_host}{swaptotal}*$info{_host}{swap});
-$info{_host}{'memfree%'} = sprintf("%.1f%%",100/$info{_host}{memtotal}*$info{_host}{memfree});
-$info{_host}{'swapfree%'} = sprintf("%.1f%%",100/$info{_host}{swaptotal}*$info{_host}{swapfree});
+$info{_host}{'mem%'} = sprintf("%.1f%%",100/$info{_host}{memtotal}*$info{_host}{mem})
+   if($info{_host}{memtotal});
+$info{_host}{'swap%'} = sprintf("%.1f%%",100/$info{_host}{swaptotal}*$info{_host}{swap})
+   if($info{_host}{swaptotal});
+$info{_host}{'memfree%'} = sprintf("%.1f%%",100/$info{_host}{memtotal}*$info{_host}{memfree})
+   if($info{_host}{memtotal});
+$info{_host}{'swapfree%'} = sprintf("%.1f%%",100/$info{_host}{swaptotal}*$info{_host}{swapfree})
+   if($info{_host}{swaptotal});
 if($info{_host}{disktotal}) {
    $info{_host}{'disk%'} = sprintf("%.1f%%",100/$info{_host}{disktotal}*$info{_host}{disk});
    $info{_host}{'diskfree%'} = sprintf("%.1f%%",100/$info{_host}{disktotal}*$info{_host}{diskfree});
