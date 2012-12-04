@@ -3,7 +3,7 @@
 # --- LXC Web interface, written by Rene K. Mueller <spiritdude@gmail.com>
 #
 $APPNAME = 'LXCWeb';
-$VERSION = '0.017';
+$VERSION = '0.018';
 # License: GPLv2
 #
 # History:
@@ -139,9 +139,10 @@ $info{_host}{'mem%'} = sprintf("%.1f%%",100/$info{_host}{memtotal}*$info{_host}{
 $info{_host}{'swap%'} = sprintf("%.1f%%",100/$info{_host}{swaptotal}*$info{_host}{swap});
 $info{_host}{'memfree%'} = sprintf("%.1f%%",100/$info{_host}{memtotal}*$info{_host}{memfree});
 $info{_host}{'swapfree%'} = sprintf("%.1f%%",100/$info{_host}{swaptotal}*$info{_host}{swapfree});
-$info{_host}{'disk%'} = sprintf("%.1f%%",100/$info{_host}{disktotal}*$info{_host}{disk});
-$info{_host}{'diskfree%'} = sprintf("%.1f%%",100/$info{_host}{disktotal}*$info{_host}{diskfree});
-
+if($info{_host}{disktotal}) {
+   $info{_host}{'disk%'} = sprintf("%.1f%%",100/$info{_host}{disktotal}*$info{_host}{disk});
+   $info{_host}{'diskfree%'} = sprintf("%.1f%%",100/$info{_host}{disktotal}*$info{_host}{diskfree});
+}
 my(@sel) = scanDir("$conf{homerun}");
 
 # -- determine resource usage per container
@@ -390,7 +391,7 @@ if($in{action}eq'about') {
          $o .= "</tr><tr>" if($n&&($n%10)==0);
          $o .= "<td class='machine$info{$id}{status} machinegrid'>".
             "<img class=machinestatusgrid src='extra/imgs/machine-$info{$id}{status}.png'><br>".
-            "<b><a href='./?action=details&id=$id'>$id</a></b><br>$info{$id}{cpu}<br>".bar(80,1,$max{cpu}?100/$max{cpu}*$info{$id}{cpu}:0).
+            "<b><a href='./?action=details&id=$id'>$id</a></b><br>".($info{$id}{cpu}?"$info{$id}{cpu} / $info{$id}{procs}":"")."<br>".bar(80,1,$max{cpu}?100/$max{cpu}*$info{$id}{cpu}:0).
             "$info{$id}{ip}".
             "</td>";
          $n++;   

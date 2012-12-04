@@ -1,4 +1,4 @@
-VERSION=0.017
+VERSION=0.018
 
 all::
 	@echo "make install"
@@ -19,10 +19,15 @@ fixperm::
 
 dist::
 	sudo rm -f index.cgi
-	cd ..; tar cfz lxcweb-${VERSION}.tar.gz LXCWeb/
+	cd ..; tar cfz Backup/lxcweb-${VERSION}.tar.gz LXCWeb/
 
 backup::
-	scp ../lxcweb-${VERSION}.tar.gz the-labs.com:Backup/
+	scp ../Backup/lxcweb-${VERSION}.tar.gz the-labs.com:Backup/
 
 github::
+	git remote set-url origin git@github.com:Spiritdude/LXCWeb.git
+	git push -u origin master
+
+edit::
+	dee4 lxcweb lxcfarm extra/css/default.css init-d-lxcweb Makefile INSTALL README
 		
