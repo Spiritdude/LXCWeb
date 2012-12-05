@@ -38,73 +38,84 @@ $in{action} = 'overview.list' unless($in{action});
 my $o;
 
 if($in{commit})  {                        # -- this action produces _no_ web-feedback, just performs tasks
-   if($in{commit}eq'host.stop') {
-      sexec('/sbin/halt');
-      
-   } elsif($in{commit}eq'host.reboot') {
-      sexec('/sbin/reboot');
-
-   } elsif($in{commit}eq'start') {
-      sexec('/usr/bin/lxc-start','-n',$in{id},'-d',"--logfile=$conf{homerun}/$in{id}/lxcweb-error.log");
-      mlog($in{id},"started");
-      open(F,">$conf{homerun}/$in{id}/.stamp.run"); close(F);
-      
-   } elsif($in{commit}eq'stop') {
-      sexec('/usr/bin/lxc-stop','-n',$in{id});
-      unlink("$conf{homerun}/$in{id}/.stamp.run");
-      mlog($in{id},"stopped");
-
-   } elsif($in{commit}eq'reboot') {
-      sexec('/usr/bin/lxc-stop','-n',$in{id});
-      sexec('/usr/bin/lxc-start','-n',$in{id},'-d',"--logfile=$conf{homerun}/$in{id}/lxcweb-error.log");
-      mlog($in{id},"rebooted");
-
-   } elsif($in{commit}eq'freeze') {
-      sexec('/usr/bin/lxc-freeze','-n',$in{id});
-      unlink("$conf{homerun}/$in{id}/.stamp.run");
-      mlog($in{id},"freeze");
-      
-   } elsif($in{commit}eq'unfreeze') {
-      sexec('/usr/bin/lxc-unfreeze','-n',$in{id});
-      open(F,">$conf{homerun}/$in{id}/.stamp.run"); close(F);
-      mlog($in{id},"unfreeze");
-
-   } elsif($in{commit}eq'create') {
-      if($in{type}=~/^clone:(\S+)/) {
-         my $orig = $1;
-
-         open(F,"$conf{homerun}/$orig/lxcweb.inf");
-         while(<F>) {
-            chop; next if(/^\s*#/);
-            $info{$orig}{$1} = $2 if(/(\S+):\s*(\S+)/);
-         }
-         close(F);
-   
-         sexec('/usr/bin/lxc-clone','-o',$orig,'-n',$in{id},'>',$in{id});
-         #sexec('/usr/bin/lxc-clone','-o',$orig,'-n',$in{id}); 
-
-         open(F,">$conf{homerun}/$in{id}/lxcweb.inf");
-         print F "type: $info{$orig}{type}\n";
-         print F "ctime: ",time(),"\n";
-         close(F);
+   my %valid;
+   if($in{id}) {
+      $in{id} =~ s/[^\w\-\.]//g;             # -- A-Za-z0-9_-. allowed, disregard all others
+      $in{id} =~ s/^\.+//;                   # -- remove leading .'s
+      $valid{id}++ if(length($in{id})>=1&&length($in{id})<=128);                 # -- sanity check
+      $valid{id} = 0 if($in{commit}ne'create'&&!-e "$conf{homerun}/$in{id}");    # -- unless create new, it has to exist
+   } else {
+      $valid{misc}++;
+   }
+   if($valid{id}||$valid{misc}) {
+      if($in{commit}eq'host.stop') {
+         sexec('/sbin/halt');
          
-         mlog($in{id},"cloned from $orig");
-
-      } else {
-         sexec('/usr/bin/lxc-create','-t',$in{type},'-n',$in{id},'>',$in{id}); 
-         #sexec('/usr/bin/lxc-create','-t',$in{type},'-n',$in{id}); 
-         open(F,">$conf{homerun}/$in{id}/lxcweb.inf");
-         print F "type: $in{type}\n";
-         print F "ctime: ",time(),"\n";
-         close(F);
-         mlog($in{id},"create with template $in{type}");
-      }
-
-   } elsif($in{commit}eq'destroy') {
-      sexec('/usr/bin/lxc-destroy','-n',$in{id});
-
-   } elsif($in{commit}eq'config') {
+      } elsif($in{commit}eq'host.reboot') {
+         sexec('/sbin/reboot');
+   
+      } elsif($in{commit}eq'start') {
+         sexec('/usr/bin/lxc-start','-n',$in{id},'-d',"--logfile=$conf{homerun}/$in{id}/lxcweb-error.log");
+         mlog($in{id},"started");
+         open(F,">$conf{homerun}/$in{id}/.stamp.run"); close(F);
+         
+      } elsif($in{commit}eq'stop') {
+         sexec('/usr/bin/lxc-stop','-n',$in{id});
+         unlink("$conf{homerun}/$in{id}/.stamp.run");
+         mlog($in{id},"stopped");
+   
+      } elsif($in{commit}eq'reboot') {
+         sexec('/usr/bin/lxc-stop','-n',$in{id});
+         sexec('/usr/bin/lxc-start','-n',$in{id},'-d',"--logfile=$conf{homerun}/$in{id}/lxcweb-error.log");
+         mlog($in{id},"rebooted");
+   
+      } elsif($in{commit}eq'freeze') {
+         sexec('/usr/bin/lxc-freeze','-n',$in{id});
+         unlink("$conf{homerun}/$in{id}/.stamp.run");
+         mlog($in{id},"freeze");
+         
+      } elsif($in{commit}eq'unfreeze') {
+         sexec('/usr/bin/lxc-unfreeze','-n',$in{id});
+         open(F,">$conf{homerun}/$in{id}/.stamp.run"); close(F);
+         mlog($in{id},"unfreeze");
+   
+      } elsif($in{commit}eq'create') {
+         if($in{type}=~/^clone:(\S+)/) {
+            my $orig = $1;
+   
+            open(F,"$conf{homerun}/$orig/lxcweb.inf");
+            while(<F>) {
+               chop; next if(/^\s*#/);
+               $info{$orig}{$1} = $2 if(/(\S+):\s*(\S+)/);
+            }
+            close(F);
       
+            sexec('/usr/bin/lxc-clone','-o',$orig,'-n',$in{id},'>',$in{id});
+            #sexec('/usr/bin/lxc-clone','-o',$orig,'-n',$in{id}); 
+   
+            open(F,">$conf{homerun}/$in{id}/lxcweb.inf");
+            print F "type: $info{$orig}{type}\n";
+            print F "ctime: ",time(),"\n";
+            close(F);
+            
+            mlog($in{id},"cloned from $orig");
+   
+         } else {
+            sexec('/usr/bin/lxc-create','-t',$in{type},'-n',$in{id},'>',$in{id}); 
+            #sexec('/usr/bin/lxc-create','-t',$in{type},'-n',$in{id}); 
+            open(F,">$conf{homerun}/$in{id}/lxcweb.inf");
+            print F "type: $in{type}\n";
+            print F "ctime: ",time(),"\n";
+            close(F);
+            mlog($in{id},"create with template $in{type}");
+         }
+   
+      } elsif($in{commit}eq'destroy') {
+         sexec('/usr/bin/lxc-destroy','-n',$in{id});
+   
+      } elsif($in{commit}eq'config') {
+         
+      }
    }
    print "Status: 307\nLocation: ./\n\n" unless($debug);
 }
