@@ -33,6 +33,7 @@ $appt = (stat($0))[9];
 $conf{home} = '/usr/local/etc/lxcweb';
 $conf{homelib} = '/usr/share/lxc';
 $conf{homerun} = '/var/lib/lxc';
+mkdir $conf{homerun} unless(-e $conf{homerun});
 $in{action} = 'overview.list' unless($in{action});
 
 my $o;
