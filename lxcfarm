@@ -10,6 +10,8 @@ $APPNAME = 'lxcfarm';
 # History:
 # 2012/11/30: initial version
 
+use File::Copy;
+
 $conf{homerun} = '/var/lib/lxc';
 
 while($#ARGV>=0) {
