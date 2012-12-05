@@ -437,8 +437,8 @@ if($in{action}eq'about') {
             '',
             '<input type=checkbox name=sel value=$id>'
             )."</tr>\n";
+         $namel = $id;
       }
-      $namel = $id;
    }
    unless($in{action}eq'overview.grid') {
       my $temp;
