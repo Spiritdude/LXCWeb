@@ -400,6 +400,7 @@ if($in{action}eq'about') {
       
    $o .= "</table>";
 
+   my $namel;
    if($in{action} eq 'overview.grid') {
       my $n;
       $o .= "<table class=machinegridTable>";
@@ -420,7 +421,6 @@ if($in{action}eq'about') {
          enclose("<th>","</th>",qw(Status Name)).
          enclose("<th class='sortable_numeric'>","</th>",qw(IP CPU Procs Procs% Memory Mem% Disk)).
          enclose("<th>","</th>",qw(Action Comment),'')."</tr>";
-      my $namel;
       foreach my $id (@sel) {
          $o .= "<tr class=machine$info{$id}{status}>";
          $o .= enclose("<td>","</td>",
