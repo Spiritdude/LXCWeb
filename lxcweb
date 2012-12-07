@@ -373,8 +373,9 @@ if($in{action}eq'about') {
       "<tr>".enclose("<td>","</td>",
          "$info{_host}{name} ($info{_host}{ip})",'','',
          "Disk:",bar(200,5,100-$info{_host}{'diskfree%'}),     # -- disk% + diskfree% != 100%
+            largeNum($info{_host}{disktotal}/1000)."MB: ",
             largeNum($info{_host}{disk}/1000)."MB",
-            "($info{_host}{'disk%'})",'/',
+            "($info{_host}{'disk%'}) used",'/',
             largeNum($info{_host}{diskfree}/1000)."MB",
             "($info{_host}{'diskfree%'}) free"
       )."</tr>";
@@ -384,16 +385,18 @@ if($in{action}eq'about') {
                ($info{_host}{cpu}>5?"over5":"over".int($info{_host}{cpu}))
             ).">$info{_host}{cpu}</span>",
       '','','Memory:',bar(200,5,$info{_host}{'mem%'}),
+      largeNum($info{_host}{memtotal}/1000)."MB: ",
       largeNum($info{_host}{mem}/1000)."MB",
-      "($info{_host}{'mem%'})",'/',
+      "($info{_host}{'mem%'}) used",'/',
       largeNum($info{_host}{memfree}/1000)."MB",
       "($info{_host}{'memfree%'}) free"
       )."</tr>";
    $o .= "<tr>".enclose("<td>","</td>",
       'Uptime: '.$info{_host}{uptime},
       '','','Swap:',bar(200,5,$info{_host}{'swap%'}),
+      largeNum($info{_host}{swaptotal}/1000)."MB: ",
       largeNum($info{_host}{swap}/1000)."MB",
-      "($info{_host}{'swap%'})",'/',
+      "($info{_host}{'swap%'}) used",'/',
       largeNum($info{_host}{swapfree}/1000)."MB",
       "($info{_host}{'swapfree%'}) free"
       )."</tr>";
@@ -403,17 +406,17 @@ if($in{action}eq'about') {
    my $namel;
    if($in{action} eq 'overview.grid') {
       my $n;
-      $o .= "<table class=machinegridTable>";
+      $o .= "<div class=machinegridTable>";
       foreach my $id (@sel) {
-         $o .= "</tr><tr>" if($n&&($n%10)==0);
-         $o .= "<td class='machine$info{$id}{status} machinegrid'>".
+         $o .= "<span class='machine$info{$id}{status} machinegridcell'>".
             "<img class=machinestatusgrid src='extra/imgs/machine-$info{$id}{status}.png'><br>".
-            "<b><a href='./?action=details&id=$id'>$id</a></b><br>".($info{$id}{cpu}?"$info{$id}{cpu} / $info{$id}{procs}":"")."<br>".bar(80,1,$max{cpu}?100/$max{cpu}*$info{$id}{cpu}:0).
+            "<b><a href='./?action=details&id=$id'>$id</a></b><br>".($info{$id}{cpu}?"$info{$id}{cpu} / $info{$id}{procs}":"")."<br>".
+            #bar(80,1,$max{cpu}?100/$max{cpu}*$info{$id}{cpu}:0).
             "$info{$id}{ip}".
-            "</td>";
+            "</span>\n";
          $n++;   
       }
-      $o .= "</tr></table>";
+      $o .= "</div><br clear=both><p>";
       
    } else { # -- overview.list
       $o .= "<table class='overviewTable sortable'>";
@@ -490,8 +493,8 @@ if($in{action}eq'about') {
       $i = 0;
       foreach (qw(up down freeze broken)) {
          $o .= ", " if($i++);
-         if($in{action}eq'overview.grid') {
-            $o .= "<span class='machine$_'>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</span> $_";
+         if(0&&$in{action}eq'overview.grid') {
+            $o .= "<span class='machine$_ machinestatuslegendarea'>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</span> $_";
          } else {
             $o .= "<img class=machinestatuslegend src='./extra/imgs/machine-$_.png'> $_";
          }
