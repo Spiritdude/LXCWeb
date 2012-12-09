@@ -3,10 +3,11 @@
 # --- LXC Web interface, written by Rene K. Mueller <spiritdude@gmail.com>
 #
 $APPNAME = 'LXCWeb';
-$VERSION = '0.018';
+$VERSION = '0.020';
 # License: GPLv2
 #
 # History:
+# 2012/12/07: 0.019: starting to AJAXify the whole thing
 # 2012/11/29: 0.012: startup script included, graphics refined
 # 2012/11/26: 0.006: cloning supported
 # 2012/11/22: 0.003: index.cgi (binary) calls 'lxcweb' (perl-script)
@@ -34,6 +35,7 @@ $conf{home} = '/usr/local/etc/lxcweb';
 $conf{homelib} = '/usr/share/lxc';
 $conf{homerun} = '/var/lib/lxc';
 mkdir $conf{homerun} unless(-e $conf{homerun});
+mkdir 'cache' unless(-e "cache");
 $in{action} = 'overview.list' unless($in{action});
 
 my $o;
@@ -121,6 +123,66 @@ if($in{commit})  {                        # -- this action produces _no_ web-fee
    print "Status: 307\nLocation: ./\n\n" unless($debug);
 }
 
+if($in{api}eq'put') {    # -- this is the direct access (AJAX approach), returns JSON, not HTML
+   if($in{key}=~/\./) {
+      my($a,$b) = split(/\./,$in{key});
+      my($v) = $in{value};
+
+      # $info{$a}{$b} = $in{value};
+      if($a eq '_host') {
+         # $b: 'homerun', 'homelib'
+         
+      } elsif(-e "$conf{homerun}/$a") {
+         my $id = $a;
+         my $update;
+
+         if($b eq 'name') {
+            $b = 'lxc.utsname';
+            $info{$id}{$b} = $v;
+            $info{$id}{'lcx.rootfs'} = "$conf{homerun}/$v/rootfs";
+            $update = 'config';
+
+         } elsif($b eq 'ip') {
+            $b = 'lxc.network.ip';
+            $info{$id}{$b} = $v;
+            $update = 'config';
+
+         } elsif($b eq 'comment') {
+            $info{$id}{$b} = $v;
+            $update = 'inf';
+         }
+
+         if($update eq 'config') {
+            open(F,">$conf{homerun}/$id/config.new");
+            open(O,"$conf{homerun}/$id/config");
+            while(<O>) {
+               if(!/\s*#/&&/^\s*(\S+)\s*=\s*(\S+)/&&length($info{$id}{$1})) {      # -- new value?
+                  print F "$1 = $info{$id}{$1}\n";                                 # -- write it
+               } else {
+                  print F $_;
+               }
+            }
+            close(O);
+            close(F);
+
+            rename("$conf{homerun}/$id/config.new","$conf{homerun}/$id/config");
+
+            if($b eq 'lxc.utsname'&&$id ne $info{$id}{$b}) {      # -- it's renamed!
+               rename("$conf{homerun}/$id","$conf{homerun}/$info{$id}{$b}");
+            }
+
+         } elsif($update eq 'inf') {
+            # -- like comment
+         }
+      }
+   #} elsif($in{key}) {
+   #   # $info{$in{key}} = $in{value};
+   #} else {
+   #   # return %info;
+   }
+   exit(0);
+}
+
 print "Content-type: text/html\n\n";
 
 # -- retrieve host info
@@ -131,7 +193,10 @@ $info{_host}{cpu} = $cpu = $1 if(/load average: ([\d\.]+)/);
 $info{_host}{name} = `hostname`; chop($info{_host}{name});
 $info{_host}{status} = 'up';
 $info{_host}{info} = `uname -or`; chop($info{_host}{info});
-$info{_host}{ip} = $1 if(`ifconfig eth0`=~/inet addr:(\S+)/);
+$_ = `ifconfig`;
+foreach (split(/\n/)) {
+   $info{_host}{ip} = $1, last if(/inet addr:(\S+)/);
+}
 $_ = `df $conf{homerun}`;
 $info{_host}{disktotal} = $1, $info{_host}{disk} = $2, $info{_host}{diskfree} = $3 
    if(/\/dev\S+\s+(\d+)\s+(\d+)\s+(\d+)/);
@@ -287,6 +352,32 @@ foreach(split(/\n/,`ifconfig`)) {
    $vid = $1, $hwaddr = $2 if(/^veth(\S+).+HWaddr (\S+)/);
    
 }
+
+# -- at this point, we have all data
+
+open(F,">cache/data.new.$$");
+foreach my $id (sort keys %info) {
+   foreach my $k (sort keys %{$info{$id}}) {
+      print F "$id.$k=$info{$id}{$k}\n";
+   }
+}
+close(F);
+rename("cache/data.new.$$","cache/data");
+
+exit(0) if($in{api}eq'sync');
+
+if($in{api}eq'get') {    # -- this is the direct access (AJAX approach), returns JSON, not HTML
+   if($in{key}=~/\./) {
+      my($a,$b) = split(/\./,$in{key});
+      # return $info{$a}{$b};
+   } elsif($in{key}) {
+      # return $info{$in{key}};
+   } else {
+      # return %info;
+   }
+   exit(0);
+}
+
  
 if($in{action}eq'about') {
    $o .= "<div class=about>";
@@ -502,9 +593,11 @@ if($in{action}eq'about') {
    }
 }
 
-print "<html><head><title>$info{_host}{name} ($stats{up}/$stats{broken}/$stats{setup}) $APPNAME-$VERSION</title><link rel=stylesheet href='./extra/css/default.css' type='text/css'>";
+print "<html><head><title>$info{_host}{name} ($stats{up}/$stats{broken}/$stats{setup}) $APPNAME-$VERSION</title>";
+print "<link rel=stylesheet href='./extra/css/default.css' type='text/css'>";
 print "<link rel=\"icon\" href='./extra/imgs/favicon.png' typex='image/png'>";
 print "<link rel=\"shortcut icon\" href='./extra/imgs/favicon.png' typex='image/png'>";
+print "<script type=\"text/javascript\" src=\"./extra/js/jquery-1.8.3.min.js\"></script>";
 print "<script type=\"text/javascript\" src=\"./extra/js/css-pop.js\"></script>";
 print "</head><body>";
 print "<script src='./extra/js/sorttable.js'></script>";
