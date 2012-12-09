@@ -1,4 +1,4 @@
-VERSION=0.018
+VERSION=0.020
 
 all::
 	@echo "make install" 
@@ -7,6 +7,7 @@ install:	index.cgi fixperm
 	sudo cp init-d-lxcweb /etc/init.d/lxcweb
 	sudo chmod +x /etc/init.d/lxcweb
 	sudo update-rc.d lxcweb defaults
+	sudo cp lxcfarm /usr/local/bin/
 
 index.cgi:	index.c
 	sudo rm -f cache/*
