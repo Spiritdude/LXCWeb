@@ -20,6 +20,9 @@ $temp = shift(@ARGV) if($ARGV[0] eq '-t');
 
 # -- rest of arguments are the machines
 
+usage() if(!$do||$#ARGV<0);
+print "ERROR: Insufficient priviledges, need to be run as root.\n" if($>);
+
 $temp = 'ubuntu' unless($temp);
 
 # -- determine the status of the RUNNING containers
@@ -187,7 +190,7 @@ foreach my $id (@m) {
 
 
 sub usage {
-   print "\nUsage $APPNAME: [cmd] {-o [clone-base]} {-t [template]} {id}...\n\tcmd\t\tcommand: {start,stop,create,freeze,unfreeze,destroy}\n\t-o clone-base\te.g. -o ubu00\n\t-t template\te.g. -t ubuntu\n\n";
+   print "\nUsage $APPNAME $VERSION: [cmd] {-o [clone-base]} {-t [template]} {id}...\n\tcmd\t\tcommand: {start,stop,create,freeze,unfreeze,destroy}\n\t-o clone-base\te.g. -o ubu00\n\t-t template\te.g. -t ubuntu\n";
    print "\nExamples:\n\tlxcfarm create -t ubuntu ubu00\n\tlxcfarm create -o ubu00 ubu01..20\n\tlxcfarm start ubu01..20\n\tlxcfarm stop ubu02 ubu05 ubu10..15\n";
    exit 1;
 }
