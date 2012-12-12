@@ -18,11 +18,16 @@ Create a base system:
 then start it, configure it properly and then leave and stop it again.
 
 Then create 40x clones of it:
-   % sudo ./lxcfarm create -o ubu00 ubu01 40
+   % sudo ./lxcfarm create -o ubu00 ubu01..40
 
 and start them
-   % sudo ./lxcfarm start ubu01 40 
+   % sudo ./lxcfarm start ubu01..40 
 
+and get an overview
+   % lxcfarm info 
+
+or particular ones
+   % lxcfarm info ubu01..20 ubu33..35 ubu40
 
 on the host:
    % sudo su
