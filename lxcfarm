@@ -2,7 +2,7 @@
 
 # -- LXC Farm, written by Rene K. Mueller <spiritdude@gmail.com>
 #
-$VERSION = '0.006';
+$VERSION = '0.007';
 $APPNAME = 'lxcfarm';
 #
 # License: GPLv2
@@ -20,10 +20,109 @@ $temp = shift(@ARGV) if($ARGV[0] eq '-t');
 
 # -- rest of arguments are the machines
 
-usage() if(!$do||$#ARGV<0);
-print "ERROR: Insufficient priviledges, need to be run as root.\n" if($>);
+usage() if(!$do||($#ARGV<0&&$do ne 'info'));
+print "ERROR: Insufficient priviledges, need to be run as root.\n" if($>&&$do ne 'info');
+
+(@ARGV) = scanDir("$conf{homerun}") if($#ARGV<0&&$do eq 'info');
 
 $temp = 'ubuntu' unless($temp);
+
+# -- retrieve host info
+open(F,"/proc/uptime"); $_ = <F>; close(F);
+$info{_host}{uptime} = prettyTime($1) if(/(\S+)/);
+$_ = `uptime`;
+$info{_host}{cpu} = $cpu = $1 if(/load average: ([\d\.]+)/);
+$info{_host}{name} = `hostname`; chop($info{_host}{name});
+$info{_host}{status} = 'up';
+$info{_host}{info} = `uname -or`; chop($info{_host}{info});
+$_ = `ifconfig`;
+foreach (split(/\n/)) {
+   $info{_host}{ip} = $1, last if(/inet addr:(\S+)/);
+}
+$_ = `df $conf{homerun}`;
+$info{_host}{disktotal} = $1, $info{_host}{disk} = $2, $info{_host}{diskfree} = $3 
+   if(/\/dev\S+\s+(\d+)\s+(\d+)\s+(\d+)/);
+open(F,"/proc/meminfo");
+while(<F>) {
+   if(/(\S+):\s+(.+)/) {
+      my $a = lc $1;
+      $info{_host}{$a} = $2;
+   }
+}
+close(F);
+
+# -- calculate some stuff 
+$info{_host}{mem} = $info{_host}{memtotal}-$info{_host}{memfree};
+$info{_host}{swap} = $info{_host}{swaptotal}-$info{_host}{swapfree};
+$info{_host}{'mem%'} = sprintf("%.1f%%",100/$info{_host}{memtotal}*$info{_host}{mem})
+   if($info{_host}{memtotal});
+$info{_host}{'swap%'} = sprintf("%.1f%%",100/$info{_host}{swaptotal}*$info{_host}{swap})
+   if($info{_host}{swaptotal});
+$info{_host}{'memfree%'} = sprintf("%.1f%%",100/$info{_host}{memtotal}*$info{_host}{memfree})
+   if($info{_host}{memtotal});
+$info{_host}{'swapfree%'} = sprintf("%.1f%%",100/$info{_host}{swaptotal}*$info{_host}{swapfree})
+   if($info{_host}{swaptotal});
+if($info{_host}{disktotal}) {
+   $info{_host}{'disk%'} = sprintf("%.1f%%",100/$info{_host}{disktotal}*$info{_host}{disk});
+   $info{_host}{'diskfree%'} = sprintf("%.1f%%",100/$info{_host}{disktotal}*$info{_host}{diskfree});
+}
+
+# -- determine resource usage per container
+foreach my $id (scanDir($conf{homerun})) {
+   $info{$id}{name} = $id;
+   $info{$id}{status} = 'down';
+   $info{$id}{type} = 'ubuntu';
+   $info{$id}{cpu} = '';
+   $info{$id}{disk} = 1; #$1 if(cacheCMD("du -s $conf{homerun}/$id/rootfs")=~/(\S+)/);  # --- very slow ... caching? async?
+   $info{$id}{'disk%'} = sprintf("%.2f%%",100/$info{_host}{disktotal}*$info{$id}{disk}) if($info{_host}{disktotal});
+   $info{$id}{iptype} = '';
+   $info{$id}{ip} = '';
+   if(open(F,"$conf{homerun}/$id/rootfs/var/lib/dhcp/dhclient.eth0.leases")||
+      open(F,"$conf{homerun}/$id/rootfs/var/lib/dhclient/dhclient-eth0.leases")) {
+      while(<F>) {
+         $info{$id}{iptype} = 'auto', $info{$id}{ip} = $1 if(/fixed-address\s+([\d\.]+);/);
+      }
+      close(F);
+   } else {
+      open(F,"$conf{homerun}/$id/rootfs/etc/network/interfaces");
+      while(<F>) {
+         $info{$id}{iptype} = 'static', $info{$id}{ip} = $1 if(/^\s*iface\s*eth0\s*inet\s*(\S+)/);
+      }
+      close(F);
+      #$info{$id}{ip} = '?';
+   }
+   foreach(qw(lxcweb.inf rootfs/boot)) { 
+      my $ct = (stat("$conf{homerun}/$id/$_"))[9];
+      $info{$id}{ctime} = $ct;
+      last if($ct);
+   }
+   # -- basic info of the container
+   open(F,"$conf{homerun}/$id/config");
+   while(<F>) {
+      chop; next if(/^\s*#/);
+      $info{$id}{$1} = $2 if(/(\S+)\s*=\s*(\S+)/);
+   }
+   close(F);
+   
+   # -- additional info
+   open(F,"$conf{homerun}/$id/lxcweb.inf");
+   while(<F>) {
+      chop; next if(/^\s*#/);
+      $info{$id}{$1} = $2 if(/(\S+):\s*(\S+)/);
+   }
+   close(F);
+
+   # -- check max of each field
+   foreach (keys %{$info{$id}}) {
+      $max{$_} = $info{$id}{$_} if($info{$id}{$_}>$max{$_});
+   }
+
+   $info{$id}{ctime} = prettyDate($info{$id}{ctime})." (".prettyTime(time()-$info{$id}{ctime})." ago)" 
+      if($info{$id}{ctime});
+   
+   $info{$id}{uptime} = 0;
+   $info{$id}{procs} = 0;
+}
 
 # -- determine the status of the RUNNING containers
 # ps -o <attr>
@@ -62,6 +161,7 @@ foreach(split(/\n/,`ps -o cgroup,stat,euid,ruid,pid,pcpu,size,command wax`)) {
       foreach (qw(procs cpu mem)) {
          $max{$_} = $info{$id}{$_} if($info{$id}{$_}>$max{$_});
       }
+      $max{procstotal}++;
    }
    if(/lxc-start \-n (\S+)/) {
       my $id = $1;
@@ -180,6 +280,13 @@ foreach my $id (@m) {
             print "$id cannot be destroyed, because status is $s\n";
          }
          
+      } elsif($do eq 'info') {
+         print "info $id\n";
+         foreach (qw(name status ip cpu procs mem disk comment)) {
+            print "\t".sprintf("%10s",$_).": $info{$id}{$_}\n"; # if($info{$id}{$_});
+         } 
+         print "\n";
+
       } else {
          print "Error: unknown command $do\n";
          usage();
@@ -190,8 +297,9 @@ foreach my $id (@m) {
 
 
 sub usage {
-   print "\nUsage $APPNAME $VERSION: [cmd] {-o [clone-base]} {-t [template]} {id}...\n\tcmd\t\tcommand: {start,stop,create,freeze,unfreeze,destroy}\n\t-o clone-base\te.g. -o ubu00\n\t-t template\te.g. -t ubuntu\n";
-   print "\nExamples:\n\tlxcfarm create -t ubuntu ubu00\n\tlxcfarm create -o ubu00 ubu01..20\n\tlxcfarm start ubu01..20\n\tlxcfarm stop ubu02 ubu05 ubu10..15\n";
+   print "\nUsage $APPNAME $VERSION: [cmd] {-o [clone-base]} {-t [template]} {id}...\n\tcmd\t\tcommand: {start,stop,create,freeze,unfreeze,destroy,info}\n\t-o clone-base\te.g. -o ubu00\n\t-t template\te.g. -t ubuntu\n";
+   print "\nExamples:\n\tlxcfarm create -t ubuntu ubu00\n\tlxcfarm create -o ubu00 ubu01..20\n\tlxcfarm start ubu01..20\n\tlxcfarm stop ubu02 ubu05 ubu10..15\n\tlxcfarm info\n\tlxcfarm info ubu01..10\n";
+   print "\n";
    exit 1;
 }
 
@@ -203,5 +311,14 @@ sub prettyDate {
 sub prettyTime {
    my($t) = @_;
    sprintf("%dd %02dh %02dm %02ds",int($t/(24*60*60)),int($t/(60*60))%24,int($t/60)%60,int($t)%60);
+}
+
+sub scanDir() {
+   my($d,$p) = @_;
+   opendir(D,$d);
+   $p = '.' unless($p);
+   @_ = sort grep(!/\./&&/$p/,readdir(D));
+   closedir(D);
+   return @_;
 }
 
