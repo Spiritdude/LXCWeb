@@ -327,7 +327,7 @@ foreach my $id (@sel) {
 foreach(split(/\n/,`ps -o pid,pcpu,size,command wax`)) {
    @_ = split(/\s+/);
    my $i;
-   foreach (qw(pid cpu size command)) {
+   foreach (qw(pid pcpu size command)) {
       $proc{$_[0]}{"_$_"} = $_[$i++];
    }
 }
@@ -347,7 +347,7 @@ foreach my $pid (readdir(D)) {
             chop; $proc{$pid}{$1} = $2 if(/^(\S+):\s*(\S*+)/);
          }
       }
-      $info{$id}{cpu} += $proc{$pid}{_cpu}; $info{$id}{cpu} = sprintf("%.2f%%",$info{$id}{cpu});
+      $info{$id}{cpu} += $proc{$pid}{_pcpu}; $info{$id}{cpu} = sprintf("%.2f%%",$info{$id}{cpu});
       $info{$id}{mem} += $proc{$pid}{VmData};   # -- VmSize
       $info{$id}{io_read} += $proc{$pid}{rchar};
       $info{$id}{io_write} += $proc{$pid}{wchar};
