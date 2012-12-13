@@ -283,6 +283,7 @@ foreach my $id (@sel) {
    
    $info{$id}{uptime} = 0;
    $info{$id}{procs} = 0;
+   $info{$id}{cpu} = sprintf("%.2f%%",0);
 }
 
 # -- determine the status of the RUNNING containers
