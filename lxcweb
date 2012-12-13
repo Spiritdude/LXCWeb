@@ -3,7 +3,7 @@
 # --- LXC Web interface, written by Rene K. Mueller <spiritdude@gmail.com>
 #
 $APPNAME = 'LXCWeb';
-$VERSION = '0.020';
+$VERSION = '0.021';
 # License: GPLv2
 #
 # History:
@@ -34,7 +34,6 @@ $appt = (stat($0))[9];
 $conf{home} = '/usr/local/etc/lxcweb';
 $conf{homelib} = '/usr/share/lxc';
 $conf{homerun} = '/var/lib/lxc';
-mkdir $conf{homerun} unless(-e $conf{homerun});
 mkdir 'cache' unless(-e "cache");
 $in{action} = 'overview.list' unless($in{action});
 
@@ -83,6 +82,8 @@ if($in{commit})  {                        # -- this action produces _no_ web-fee
          mlog($in{id},"unfreeze");
    
       } elsif($in{commit}eq'create') {
+
+         mkdir $conf{homerun} unless(-e $conf{homerun});
          if($in{type}=~/^clone:(\S+)/) {
             my $orig = $1;
    
@@ -675,7 +676,7 @@ sub prettyDate {
 
 sub prettyTime {
    my($t) = @_;
-   sprintf("%dd %02dh %02dm %02ds",int($t/(24*60*60)),int($t/(60*60))%24,int($t/60)%60,int($t)%60);
+   sprintf("%sd %02dh %02dm %02ds",largeNum(int($t/(24*60*60)),0),int($t/(60*60))%24,int($t/60)%60,int($t)%60);
 }
 
 sub scanDir() {
