@@ -29,13 +29,30 @@ and get an overview
 or particular ones
    % lxcfarm info ubu01..20 ubu33..35 ubu40
 
+==SSH Host & Container==
+
 on the host:
    % sudo su
    % ssh-keygen
    % mkdir /var/lib/lxc/ubu01/rootfs/root/.ssh
+
+share the public-key direct into the directory of the lxc container(s), e.g. 
    % cat .ssh/id_rsa.pub >> /var/lib/lxc/ubu01/rootfs/root/.ssh/authorized_keys
 
-recreating ssh keys (private & public) in the lxc containers:
+recreating ssh keys (private & public) in the container(s):
    % rm -f /ec/ssh/ssh_host_*
    % dpkg-reconfigure openssh-server
-   
+
+==SHELLINABOX==
+
+in the container:
+   % sudo su
+   % apt-get install shellinabox
+   % cd /var/lib/shellinabox
+   % openssl genrsa -des3 -out server.key 1024
+   % openssl req -new -key server.key -out server.csr
+   % cp server.key server.key.org
+   % openssl rsa -in server.key.org -out server.key
+   % openssl x509 -req -days 365 -in server.csr -signkey server.key -out server.crt
+   % cat server.crt server.key > certificate.pem
+  

@@ -8,6 +8,8 @@ what works:
 - auto-start containers at boot time when host starts
 - halt and reboot host (and all containers therein)
 
+read INSTALL for more details.
+
 what doesn't works:
 - configure virtual network (br0), for now it's DHCP; each container a DHCP-client (dynamic IP allocation)
 - static IP for containers
