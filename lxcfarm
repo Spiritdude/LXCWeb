@@ -2,12 +2,13 @@
 
 # -- LXC Farm, written by Rene K. Mueller <spiritdude@gmail.com>
 #
-$VERSION = '0.007';
+$VERSION = '0.008';
 $APPNAME = 'lxcfarm';
 #
 # License: GPLv2
 #
 # History:
+# 2012/12/13: more refined info of the container (from lxcweb)
 # 2012/11/30: initial version
 
 use File::Copy;
@@ -124,54 +125,50 @@ foreach my $id (scanDir($conf{homerun})) {
    $info{$id}{procs} = 0;
 }
 
-# -- determine the status of the RUNNING containers
-# ps -o <attr>
-#       c     cmd          simple name of executable
-#       C     pcpu         cpu utilization
-#       f     flags        flags as in long format F field
-#       g     pgrp         process group ID
-#       G     tpgid        controlling tty process group ID
-#       j     cutime       cumulative user time
-#       J     cstime       cumulative system time
-#       k     utime        user time
-#       m     min_flt      number of minor page faults
-#       M     maj_flt      number of major page faults
-#       n     cmin_flt     cumulative minor page faults
-#       N     cmaj_flt     cumulative major page faults
-#       o     session      session ID
-#       p     pid          process ID
-#       P     ppid         parent process ID
-#       r     rss          resident set size
-#       R     resident     resident pages
-#       s     size         memory size in kilobytes
-#       S     share        amount of shared pages
-#       t     tty          the device number of the controlling tty
-#       T     start_time   time process was started
-#       U     uid          user ID number
-#       u     user         user name
-#       v     vsize        total VM size in KiB
-#       y     priority     kernel scheduling priority
-                                          
-foreach(split(/\n/,`ps -o cgroup,stat,euid,ruid,pid,pcpu,size,command wax`)) {
-   if(/^\d+:perf_event:\/lxc\/(\S+),\S*\s+(\S+)\s+(\S+)\s+(\S+)\s+(\S+)\s+(\S+)\s+(\S+)/) {
+# -- get basic info (cpu, memsize, command) via 'ps' 
+foreach(split(/\n/,`ps -o pid,pcpu,size,command wax`)) {
+   @_ = split(/\s+/);
+   my $i;
+   foreach (qw(pid cpu size command)) {
+      $proc{$_[0]}{"_$_"} = $_[$i++];
+   }
+}
+
+# -- more details via /proc/ (cpu isn't simple to determine via /proc/*/stat)
+opendir(D,"/proc/");
+foreach my $pid (readdir(D)) {
+   foreach my $f (qw(cgroup stat status io cmdline)) {
+      open(F,"/proc/$pid/$f"); $_ = join('',<F>); close(F);
+      $proc{$pid}{$f} = $_;
+   }
+   if($proc{$pid}{cgroup}=~/^8:perf_event:\/lxc\/(\S+)/) {
       my $id = $1;
       $info{$id}{procs}++;
-      $info{$id}{cpu} += $6; $info{$id}{cpu} = sprintf("%.2f%%",$info{$id}{cpu});
-      $info{$id}{mem} += $7;
+      foreach my $f (qw(io status)) {
+         foreach(split(/\n/,$proc{$pid}{$f})) {
+            chop; $proc{$pid}{$1} = $2 if(/^(\S+):\s*(\S*+)/);
+         }
+      }
+      $info{$id}{cpu} += $proc{$pid}{_cpu}; $info{$id}{cpu} = sprintf("%.2f%%",$info{$id}{cpu});
+      $info{$id}{mem} += $proc{$pid}{VmData};   # -- VmSize
+      $info{$id}{io_read} += $proc{$pid}{rchar};
+      $info{$id}{io_write} += $proc{$pid}{wchar};
+      
       foreach (qw(procs cpu mem)) {
          $max{$_} = $info{$id}{$_} if($info{$id}{$_}>$max{$_});
       }
       $max{procstotal}++;
-   }
-   if(/lxc-start \-n (\S+)/) {
-      my $id = $1;
+
       #$info{$id}{cpu} = $cpu;
       $info{$id}{status} = 'up';
       open(F,"/sys/fs/cgroup/freezer/lxc/$id/freezer.state"); $_ = <F>; close(F);
       $info{$id}{status} = 'freeze' if(/frozen/i);
+
+      #$info{$id}{uptime} = prettyTime(time()-(stat("$conf{homerun}/$id/rootfs.hold"))[9]) if($info{$id}{status}eq'up');
       $info{$id}{uptime} = prettyTime(time()-(stat("$conf{homerun}/$id/.stamp.run"))[9]) if($info{$id}{status}eq'up');
    }
 }
+closedir(D);
 $max{procstotal} = $max{procs} = 1 unless($max{procs});
 
 $stats{up} = $stats{down} = $stats{setup} = $stats{broken} = 0;
@@ -226,7 +223,7 @@ foreach my $id (@m) {
          }
          
       } elsif($do eq 'start') {
-         if(!$info{$id}{status}) {
+         if($info{$id}{status}eq'down') {
             print "start $id\n";
             if(1) {
                `lxc-start -n $id -d --logfile=$conf{homerun}/$id/lxcweb-error.log`;
@@ -272,7 +269,7 @@ foreach my $id (@m) {
          }
          
       } elsif($do eq 'destroy') {
-         if(!$info{$id}{status}) {
+         if($info{$id}{status}eq'down') {
             print "destroy $id\n";
             `lxc-destroy -n $id`; # --logfile=$conf{homerun}/$id/lxcweb-error.log`;
          } else {

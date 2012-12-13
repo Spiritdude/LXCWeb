@@ -3,10 +3,11 @@
 # --- LXC Web interface, written by Rene K. Mueller <spiritdude@gmail.com>
 #
 $APPNAME = 'LXCWeb';
-$VERSION = '0.021';
+$VERSION = '0.022';
 # License: GPLv2
 #
 # History:
+# 2012/12/13: 0.022: refined info on container via ps/proc combination
 # 2012/12/07: 0.019: starting to AJAXify the whole thing
 # 2012/11/29: 0.012: startup script included, graphics refined
 # 2012/11/26: 0.006: cloning supported
@@ -312,19 +313,50 @@ foreach my $id (@sel) {
 #       v     vsize        total VM size in KiB
 #       y     priority     kernel scheduling priority
                                           
-foreach(split(/\n/,`ps -o cgroup,stat,euid,ruid,pid,pcpu,size,command wax`)) {
-   if(/^\d+:perf_event:\/lxc\/(\S+),\S*\s+(\S+)\s+(\S+)\s+(\S+)\s+(\S+)\s+(\S+)\s+(\S+)/) {
+# foreach(split(/\n/,`ps -o cgroup,stat,euid,ruid,pid,pcpu,size,command wax`)) {
+#    if(/^\d+:perf_event:\/lxc\/(\S+),\S*\s+(\S+)\s+(\S+)\s+(\S+)\s+(\S+)\s+(\S+)\s+(\S+)/) {
+#      $info{$id}{procs}++;
+#      $info{$id}{cpu} += $6; $info{$id}{cpu} = sprintf("%.2f%%",$info{$id}{cpu});
+#      $info{$id}{mem} += $7;
+#      foreach (qw(procs cpu mem)) {
+#         $max{$_} = $info{$id}{$_} if($info{$id}{$_}>$max{$_});
+#      }
+#      $max{procstotal}++;
+
+# -- get basic info (cpu, memsize, command) via 'ps' 
+foreach(split(/\n/,`ps -o pid,pcpu,size,command wax`)) {
+   @_ = split(/\s+/);
+   my $i;
+   foreach (qw(pid cpu size command)) {
+      $proc{$_[0]}{"_$_"} = $_[$i++];
+   }
+}
+
+# -- more details via /proc/ (cpu isn't simple to determine via /proc/*/stat)
+opendir(D,"/proc/");
+foreach my $pid (readdir(D)) {
+   foreach my $f (qw(cgroup stat status io cmdline)) {
+      open(F,"/proc/$pid/$f"); $_ = join('',<F>); close(F);
+      $proc{$pid}{$f} = $_;
+   }
+   if($proc{$pid}{cgroup}=~/^8:perf_event:\/lxc\/(\S+)/) {
       my $id = $1;
       $info{$id}{procs}++;
-      $info{$id}{cpu} += $6; $info{$id}{cpu} = sprintf("%.2f%%",$info{$id}{cpu});
-      $info{$id}{mem} += $7;
+      foreach my $f (qw(io status)) {
+         foreach(split(/\n/,$proc{$pid}{$f})) {
+            chop; $proc{$pid}{$1} = $2 if(/^(\S+):\s*(\S*+)/);
+         }
+      }
+      $info{$id}{cpu} += $proc{$pid}{_cpu}; $info{$id}{cpu} = sprintf("%.2f%%",$info{$id}{cpu});
+      $info{$id}{mem} += $proc{$pid}{VmData};   # -- VmSize
+      $info{$id}{io_read} += $proc{$pid}{rchar};
+      $info{$id}{io_write} += $proc{$pid}{wchar};
+      
       foreach (qw(procs cpu mem)) {
          $max{$_} = $info{$id}{$_} if($info{$id}{$_}>$max{$_});
       }
       $max{procstotal}++;
-   }
-   if(/lxc-start \-n (\S+)/) {
-      my $id = $1;
+
       #$info{$id}{cpu} = $cpu;
       $info{$id}{status} = 'up';
       open(F,"/sys/fs/cgroup/freezer/lxc/$id/freezer.state"); $_ = <F>; close(F);
@@ -334,6 +366,8 @@ foreach(split(/\n/,`ps -o cgroup,stat,euid,ruid,pid,pcpu,size,command wax`)) {
       $info{$id}{uptime} = prettyTime(time()-(stat("$conf{homerun}/$id/.stamp.run"))[9]) if($info{$id}{status}eq'up');
    }
 }
+closedir(D);
+
 $max{procstotal} = $max{procs} = 1 unless($max{procs});
 
 $stats{up} = $stats{down} = $stats{setup} = $stats{broken} = 0;
