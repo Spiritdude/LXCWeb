@@ -7,20 +7,28 @@ a { text-decoration: none }
 .overviewTable { border: 1px solid; margin: 0.3em 0em; padding: 0px; width: 100%; border-spacing: 1px; background: #f0f0f0; }
 .overviewTable td { padding: 1px 8px; text-align: center; font-size: 0.9em; }
 .overviewTable th { padding: 1px 8px; background: black; color: white; font-size: 0.9em }
-.machinedown { background: #e0e0e0; }
-.machinedown:hover { background: #c0c0c0; }
+
+.machinedown { background: #f0f0f0; }
+.machinedown:hover { background: #e0e0e0; }
+
 .machineup { background: #c0c0ff; }
 .machineup:hover { background: #a0a0e0; }
+
 .machinefreeze { background: #f0d040; }
 .machinefreeze:hover { background: #f0a020; }
+
 .machinebroken { background: #c08080; }
 .machinebroken:hover { background: #a08080; }
+
 .machinestatus { width: 30px; height: 30px; margin: 0px 3px; }
 .machinestatusgrid { width: 24px; height: 24px; }
 .machinegridTable { margin: 0.2em 0em; border-spacing: 0.5em 0.8em; border-collapse: separate; }
 .machinegrid { vertical-align: top; font-size: 0.8em; text-align: center; padding: 0.5em 0.8em; border: 1px solid #808080; box-shadow: 0px 0px 5px black; margin: 0.8em 1.2em; border-radius: 5px }
+.machinegridcell { overflow: hidden; float: left; width: 6em; vertical-align: top; font-size: 0.8em; text-align: center; padding: 0.5em 0.5em; border: 1px solid #808080; box-shadow: 0px 0px 5px black; margin: 0.4em 0.4em; border-radius: 5px }
+
 .machinestatusheader { width: 12px; height: 12px }
-.machinestatuslegend { vertical-align: bottom; width: 14px; height: 14px }
+.machinestatuslegend { vertical-align: bottom; width: 14px; height: 14px; }
+
 .button { margin: 0px 2px; width: 30px; height: 30px; }
 .infohwaddr { font-size: 0.6em }
 .infotype { font-size: 0.6em }
@@ -33,11 +41,12 @@ a { text-decoration: none }
 .cpuloadover4 { font-weight: bold; color: #f06000; text-decoration: underline }
 .cpuloadover5 { font-weight: bold; color: #f00000; text-decoration: underline }
 .log { overflow: auto; height: 500px; background: #eee; border: 1px solid #ccc; font-size: 0.6em; }
+.about { margin: 2em 4em; margin-left: 12em; }
 .warning { text-align: center; margin: 1em 1em; border: 1px solid; background: red; color: white; padding: 0.5em 0.5em; }
 .inputField {}
 .formSubmit {}
 #lxclogo { vertical-align: bottom }
-#footer { font-size: 0.7em; text-align: right; }
+#footer { font-size: 0.7em; text-align: left; }
 
 #blanket {
    background-color: #111;

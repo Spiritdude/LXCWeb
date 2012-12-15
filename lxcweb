@@ -348,6 +348,7 @@ foreach my $pid (readdir(D)) {
             chop; $proc{$pid}{$1} = $2 if(/^(\S+):\s*(\S*+)/);
          }
       }
+      $info{$id}{shellinabox}++ if($proc{$pid}{cmdline}=~/shellinaboxd/);
       $info{$id}{cpu} += $proc{$pid}{_pcpu}; $info{$id}{cpu} = sprintf("%.2f%%",$info{$id}{cpu});
       $info{$id}{mem} += $proc{$pid}{VmData};   # -- VmSize
       $info{$id}{io_read} += $proc{$pid}{rchar};
@@ -450,6 +451,10 @@ if($in{action}eq'about') {
          "</tr>";
    }
    $o .= "</table>";
+
+   $o .= "<p><iframe src='https://$info{$id}{ip}:4200/' width=100% height=400></iframe>" 
+      if($info{$id}{status}eq'up'&&$info{$id}{shellinabox});
+
    $o .= "<p><table><tr>";
    #open(F,"$conf{homerun}/$id/rootfs/var/log/syslog");
    my $wp = '33%';
@@ -625,7 +630,8 @@ if($in{action}eq'about') {
          } else {
             $o .= "<img class=machinestatuslegend src='./extra/imgs/machine-$_.png'> $_";
          }
-      } 
+      }
+      $o .= "<p>"; 
    }
 }
 
@@ -648,14 +654,13 @@ foreach(@sel) {
    $t = $1 if(s/\:(.+)//);
    print "<li".($in{action}eq$_?" id=selected><a href=#>$t</a>":"><a href='./?action=$_'>$t</a>")."</li>\n";
 }
-#print "<li id=off>LXCHost: <b>$info{_host}{name}</b>, $info{_host}{info}, CPU: $cpu, Disk: ".sprintf("%.2fMB",$info{_host}{disk}/1000)." / $info{_host}{'disk%'}</li>\n";
 print "</ul>";
 print "</div>";
 
 print "<div id=content>";
 print $o;
+print "<div id=footer>".`uname -a`."; $APPNAME-$VERSION ",prettyDate($appt),"</div>";
 print "</div>";
-print "<div id=footer>$APPNAME-$VERSION ",prettyDate($appt),"</div>";
 
 print "<div id=blanket style='display:none;'></div>
    <div id=popup style='display:none;'></div>
