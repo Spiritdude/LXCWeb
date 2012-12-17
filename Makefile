@@ -30,5 +30,5 @@ github::
 	git push -u origin master
 
 edit::
-	dee4 lxcweb lxcfarm extra/css/default.css init-d-lxcweb Makefile INSTALL README
+	dee4 lxcweb lxcfarm extra/css/default.css init-d-lxcweb Makefile about.html INSTALL README
 		
