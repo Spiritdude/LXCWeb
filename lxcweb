@@ -548,7 +548,7 @@ if($in{action}eq'about') {
             "</span>\n";
          $n++;   
       }
-      $o .= "</div><br clear=both><p>";
+      $o .= "</div><br clear=both><br>";
       
    } else { # -- overview.list
       $o .= "<table class='overviewTable sortable'>";
@@ -631,7 +631,6 @@ if($in{action}eq'about') {
             $o .= "<img class=machinestatuslegend src='./extra/imgs/machine-$_.png'> $_";
          }
       }
-      $o .= "<p>"; 
    }
 }
 
@@ -659,8 +658,8 @@ print "</div>";
 
 print "<div id=content>";
 print $o;
-print "<div id=footer>".`uname -a`."; $APPNAME-$VERSION ",prettyDate($appt),"</div>";
 print "</div>";
+print "<div id=footer>".`uname -a`."; $APPNAME-$VERSION ",prettyDate($appt),"</div>";
 
 print "<div id=blanket style='display:none;'></div>
    <div id=popup style='display:none;'></div>
