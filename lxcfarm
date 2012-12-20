@@ -199,7 +199,7 @@ foreach my $name (@ARGV) {
 }
 
 if($do) {
-   print "$APPNAME: perform $do on ".($#m+1)." containers:\n";
+   print "$APPNAME: perform $do on ".($#m+1)." container".($#m>0?"s":"").":\n";
 } else {
    usage();
 }
@@ -225,7 +225,7 @@ foreach my $id (@m) {
          }
          
       } elsif($do eq 'start') {
-         if($info{$id}{status}eq'down') {
+         if($info{$id}{status}eq'down'||$info{$id}{status}eq'broken') {
             print "$do $id\n";
             if(1) {
                `lxc-start -n $id -d --logfile=$conf{homerun}/$id/lxcweb-error.log`;
