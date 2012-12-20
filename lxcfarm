@@ -2,7 +2,7 @@
 
 # -- LXC Farm, written by Rene K. Mueller <spiritdude@gmail.com>
 #
-$VERSION = '0.008';
+$VERSION = '0.009';
 $APPNAME = 'lxcfarm';
 #
 # License: GPLv2
@@ -16,8 +16,8 @@ use File::Copy;
 $conf{homerun} = '/var/lib/lxc';
 
 $do = shift(@ARGV);
-$orig = shift(@ARGV) if($ARGV[0] eq '-o');
-$temp = shift(@ARGV) if($ARGV[0] eq '-t');
+shift(@ARGV), $orig = shift(@ARGV) if($ARGV[0] eq '-o');
+shift(@ARGV), $temp = shift(@ARGV) if($ARGV[0] eq '-t');
 
 # -- rest of arguments are the machines
 
@@ -69,7 +69,9 @@ if($info{_host}{disktotal}) {
 }
 
 # -- determine resource usage per container
-foreach my $id (scanDir($conf{homerun})) {
+my(@sel) = scanDir($conf{homerun});
+
+foreach my $id (@sel) {
    $info{$id}{name} = $id;
    $info{$id}{status} = 'down';
    $info{$id}{type} = 'ubuntu';
@@ -128,8 +130,8 @@ foreach my $id (scanDir($conf{homerun})) {
 # -- get basic info (cpu, memsize, command) via 'ps' 
 foreach(split(/\n/,`ps -o pid,pcpu,size,command wax`)) {
    @_ = split(/\s+/);
-   my $i;
-   foreach (qw(pid cpu size command)) {
+   my $i = 0;
+   foreach (qw(pid pcpu size command)) {
       $proc{$_[0]}{"_$_"} = $_[$i++];
    }
 }
@@ -149,7 +151,7 @@ foreach my $pid (readdir(D)) {
             chop; $proc{$pid}{$1} = $2 if(/^(\S+):\s*(\S*+)/);
          }
       }
-      $info{$id}{cpu} += $proc{$pid}{_cpu}; $info{$id}{cpu} = sprintf("%.2f%%",$info{$id}{cpu});
+      $info{$id}{cpu} += $proc{$pid}{_pcpu}; $info{$id}{cpu} = sprintf("%.2f%%",$info{$id}{cpu});
       $info{$id}{mem} += $proc{$pid}{VmData};   # -- VmSize
       $info{$id}{io_read} += $proc{$pid}{rchar};
       $info{$id}{io_write} += $proc{$pid}{wchar};
@@ -207,7 +209,7 @@ foreach my $id (@m) {
       print "\tskipping $id, exists already\n";
 
    } else {
-      print "\t",($i+1)," of ".($#m+1).": ";
+      print "\t",($i+1)," of ".($#m+1).": " unless($do eq 'info');
       if($do eq 'create') {
          if($orig) {
             print "clone $orig to $id\n";
@@ -224,7 +226,7 @@ foreach my $id (@m) {
          
       } elsif($do eq 'start') {
          if($info{$id}{status}eq'down') {
-            print "start $id\n";
+            print "$do $id\n";
             if(1) {
                `lxc-start -n $id -d --logfile=$conf{homerun}/$id/lxcweb-error.log`;
             } else {
@@ -242,7 +244,7 @@ foreach my $id (@m) {
          
       } elsif($do eq 'freeze') {
          if($info{$id}{status}eq'up') {
-            print "freeze $id\n";
+            print "$do $id\n";
             `lxc-freeze -n $id`; # --logfile=$conf{homerun}/$id/lxcweb-error.log`;
          } else {
             my $s = $info{$id}{status}; $s = 'down' unless($s);
@@ -251,7 +253,7 @@ foreach my $id (@m) {
          
       } elsif($do eq 'unfreeze') {
          if($info{$id}{status}eq'freeze') {
-            print "unfreeze $id\n";
+            print "$do $id\n";
             `lxc-unfreeze -n $id`; # --logfile=$conf{homerun}/$id/lxcweb-error.log`;
          } else {
             my $s = $info{$id}{status}; $s = 'down' unless($s);
@@ -260,7 +262,7 @@ foreach my $id (@m) {
          
       } elsif($do eq 'stop') {
          if($info{$id}{status}eq'up') {
-            print "stop $id\n";
+            print "$do $id\n";
             `lxc-stop -n $id`; # --logfile=$conf{homerun}/$id/lxcweb-error.log`;
             unlink("$conf{homerun}/$id/.stamp.run");
          } else {
@@ -270,7 +272,7 @@ foreach my $id (@m) {
          
       } elsif($do eq 'destroy') {
          if($info{$id}{status}eq'down') {
-            print "destroy $id\n";
+            print "$do $id\n";
             `lxc-destroy -n $id`; # --logfile=$conf{homerun}/$id/lxcweb-error.log`;
          } else {
             my $s = $info{$id}{status}; $s = 'down' unless($s);
@@ -278,9 +280,14 @@ foreach my $id (@m) {
          }
          
       } elsif($do eq 'info') {
-         print "info $id\n";
-         foreach (qw(name status ip cpu procs mem disk comment)) {
-            print "\t".sprintf("%10s",$_).": $info{$id}{$_}\n"; # if($info{$id}{$_});
+         print "$do $id: ";
+         my $i;
+         foreach (qw(status ip cpu procs mem disk comment)) {
+            #print "\t".sprintf("%10s",$_).": '$info{$id}{$_}'"; # if(length($info{$id}{$_}));
+            if(length($info{$id}{$_})) {
+               print ", " if($i++);
+               print "$_: $info{$id}{$_}";
+            }
          } 
          print "\n";
 
