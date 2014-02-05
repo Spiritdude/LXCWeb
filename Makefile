@@ -16,6 +16,7 @@ index.cgi:	index.c
 fixperm::
 	sudo chown root:root index.cgi
 	sudo chmod 4755 index.cgi
+	sudo mkdir cache
 	sudo chmod a+rwx cache
 
 dist::

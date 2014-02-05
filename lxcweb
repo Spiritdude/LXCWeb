@@ -194,7 +194,7 @@ $_ = `uptime`;
 $info{_host}{cpu} = $cpu = $1 if(/load average: ([\d\.]+)/);
 $info{_host}{name} = `hostname`; chop($info{_host}{name});
 $info{_host}{status} = 'up';
-$info{_host}{info} = `uname -or`; chop($info{_host}{info});
+open(F,"/proc/version"); $info{_host}{version} = <F>; close(F); chop($info{_host}{version});
 $_ = `ifconfig`;
 foreach (split(/\n/)) {
    $info{_host}{ip} = $1, last if(/inet addr:(\S+)/);
@@ -659,7 +659,7 @@ print "</div>";
 print "<div id=content>";
 print $o;
 print "</div>";
-print "<div id=footer>".`uname -a`."; $APPNAME-$VERSION ",prettyDate($appt),"</div>";
+print "<div id=footer>$info{_host}{version}; $APPNAME-$VERSION ",prettyDate($appt),"</div>";
 
 print "<div id=blanket style='display:none;'></div>
    <div id=popup style='display:none;'></div>
